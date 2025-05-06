@@ -23,4 +23,4 @@ COPY . .
 EXPOSE ${PORT}
 
 # Command to run the application
-CMD ["sh", "-c", "cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
