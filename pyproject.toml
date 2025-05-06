@@ -1,0 +1,5 @@
+# pyproject.toml
+[build-system]
+# XXX: If your project requires a specific version of setuptools, you can specify it here.
+requires = ["setuptools>=42.0.0"]
+build-backend = "setuptools.build_meta"
