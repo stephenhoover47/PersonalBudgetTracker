@@ -8,10 +8,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Database URL from environment variables
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:postgres@localhost/budget_tracker"  # Default local development URL
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Check if DATABASE_URL is set
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is not set")
+
 
 # If using Neon PostgreSQL, we need to modify connection string to handle SSL
 if "neon.tech" in DATABASE_URL:
