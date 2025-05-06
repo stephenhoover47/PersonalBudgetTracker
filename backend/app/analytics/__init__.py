@@ -5,7 +5,11 @@ from app.analytics.sql_queries import (
     top_merchants_by_spending,
     spending_trends,
     account_balances,
-    transaction_stats
+    transaction_stats,
+    recurring_transactions,
+    category_breakdown_by_year,
+    spending_by_day_of_week,
+    savings_rate_analysis
 )
 
 __all__ = [
@@ -15,5 +19,9 @@ __all__ = [
     "top_merchants_by_spending",
     "spending_trends",
     "account_balances",
-    "transaction_stats"
+    "transaction_stats",
+    "recurring_transactions",
+    "category_breakdown_by_year",
+    "spending_by_day_of_week",
+    "savings_rate_analysis"
 ]
