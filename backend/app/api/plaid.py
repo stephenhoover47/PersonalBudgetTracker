@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db.models import PlaidItem, Account
-from app.plaid_client import get_access_token, create_sandbox_public_token
+from app.plaid_client import get_access_token, create_sandbox_public_token, create_link_token
 from app.services.plaid_service import sync_transactions
 
 router = APIRouter(
@@ -13,6 +13,10 @@ router = APIRouter(
     tags=["plaid"],
     responses={404: {"description": "Not found"}},
 )
+
+class LinkTokenRequest(BaseModel):
+    user_id: int
+    client_name: Optional[str] = "Personal Budget Tracker"
 
 class PublicTokenRequest(BaseModel):
     public_token: str
@@ -24,6 +28,20 @@ class SyncTransactionsRequest(BaseModel):
     access_token: str
     user_id: int
     cursor: Optional[str] = None
+
+@router.post("/create_link_token/")
+def create_plaid_link_token(request: LinkTokenRequest):
+    """
+    Create a Plaid Link token for initializing Plaid Link
+    """
+    try:
+        link_token = create_link_token(str(request.user_id), request.client_name)
+        return {"link_token": link_token, "status": "success"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create link token: {str(e)}"
+        )
 
 @router.get("/sandbox_token/")
 def get_sandbox_token():
