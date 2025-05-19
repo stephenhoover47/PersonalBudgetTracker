@@ -68,9 +68,10 @@ alembic downgrade -1
 
 ### Using Plaid Link
 
-The backend provides endpoints for integrating with Plaid Link:
+The backend provides endpoints for integrating with Plaid Link, including support for Plaid Hosted Link:
 
-1. Create a Link Token:
+#### Regular Link
+1. Create a Link Token (Legacy method):
 ```
 POST /plaid/create_link_token/
 {
@@ -80,7 +81,20 @@ POST /plaid/create_link_token/
 ```
 Returns a link token that can be used to initialize Plaid Link on the frontend.
 
-2. Exchange Public Token:
+#### Hosted Link (Recommended)
+2. Create a Hosted Link:
+```
+POST /plaid/create_hosted_link/
+{
+  "user_id": 1,
+  "redirect_uri": "https://yourapp.com/plaid/callback",
+  "client_name": "Personal Budget Tracker"
+}
+```
+Returns both a link token and a hosted_link_url. The hosted_link_url can be used to redirect users directly to Plaid's hosted Link interface without needing to implement Plaid Link in your frontend.
+
+#### Common Endpoints
+3. Exchange Public Token:
 ```
 POST /plaid/exchange_token/
 {
@@ -92,7 +106,7 @@ POST /plaid/exchange_token/
 ```
 Exchanges the public token for an access token and stores the Plaid item in the database.
 
-3. Sync Transactions:
+4. Sync Transactions:
 ```
 POST /plaid/sync_transactions/
 {
