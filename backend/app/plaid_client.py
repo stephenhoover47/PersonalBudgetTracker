@@ -188,10 +188,15 @@ def create_hosted_link_token(user_id: str, redirect_uri: str, client_name: str =
         )
 
         response = retry_api_call(client.link_token_create, request)
-
+        
+        # Construct the hosted link URL using the link_token
+        # Format is typically: https://{environment}.plaid.com/link/token/{link_token}
+        base_url = host_map[PLAID_ENV].replace("https://", "https://link.")
+        hosted_link_url = f"{base_url}/token/{response.link_token}"
+        
         return {
             "link_token": response.link_token,
-            "hosted_link_url": response.link_token_url
+            "hosted_link_url": hosted_link_url
         }
     except Exception as e:
         logger.error(f"Error creating hosted link token: {str(e)}")
