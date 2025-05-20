@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db.models import PlaidItem, Account
-from app.plaid_client import get_access_token, create_sandbox_public_token
+from app.plaid_client import get_access_token, create_sandbox_public_token, create_link_token, create_hosted_link_token
 from app.services.plaid_service import sync_transactions
 
 router = APIRouter(
@@ -13,6 +13,15 @@ router = APIRouter(
     tags=["plaid"],
     responses={404: {"description": "Not found"}},
 )
+
+class LinkTokenRequest(BaseModel):
+    user_id: int
+    client_name: Optional[str] = "Personal Budget Tracker"
+
+class HostedLinkTokenRequest(BaseModel):
+    user_id: int
+    redirect_uri: str
+    client_name: Optional[str] = "Personal Budget Tracker"
 
 class PublicTokenRequest(BaseModel):
     public_token: str
@@ -24,6 +33,46 @@ class SyncTransactionsRequest(BaseModel):
     access_token: str
     user_id: int
     cursor: Optional[str] = None
+    
+class PlaidLinkCallbackRequest(BaseModel):
+    """Request model for handling Plaid link callback"""
+    link_token: str
+
+@router.post("/create_link_token/")
+def create_plaid_link_token(request: LinkTokenRequest):
+    """
+    Create a Plaid Link token for initializing Plaid Link (legacy method)
+    """
+    try:
+        link_token = create_link_token(str(request.user_id), request.client_name)
+        return {"link_token": link_token, "status": "success"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create link token: {str(e)}"
+        )
+
+@router.post("/create_hosted_link/")
+def create_plaid_hosted_link(request: HostedLinkTokenRequest):
+    """
+    Create a Plaid Hosted Link URL and token for using Plaid's fully hosted experience
+    """
+    try:
+        result = create_hosted_link_token(
+            str(request.user_id),
+            request.redirect_uri,
+            request.client_name
+        )
+        return {
+            "link_token": result["link_token"],
+            "hosted_link_url": result["hosted_link_url"],
+            "status": "success"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create hosted link token: {str(e)}"
+        )
 
 @router.get("/sandbox_token/")
 def get_sandbox_token():
@@ -96,3 +145,28 @@ def sync_plaid_transactions(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to sync transactions: {str(e)}"
         )
+        
+@router.get("/oauth-callback/")
+def plaid_oauth_callback(
+    state: Optional[str] = None, 
+    code: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Handle OAuth callback from Plaid Hosted Link
+    
+    This endpoint serves as the redirect_uri that Plaid will redirect to after
+    a user completes the Plaid Hosted Link flow. 
+    
+    When using Hosted Link, the public_token will be available through:
+    1. The SESSION_FINISHED webhook
+    2. The /link/token/get Plaid API endpoint
+    
+    This endpoint simply confirms receipt of the callback and provides instructions
+    on next steps for the user.
+    """
+    return {
+        "status": "success",
+        "message": "Authentication completed. You may close this window and return to the application.",
+        "received_state": state,
+        "received_code": code is not None
+    }

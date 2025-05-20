@@ -11,6 +11,10 @@ from plaid.configuration import Configuration
 from plaid.model.products import Products
 from plaid.model.country_code import CountryCode
 from plaid.model.sandbox_public_token_create_request import SandboxPublicTokenCreateRequest
+from plaid.model.link_token_create_request import LinkTokenCreateRequest
+from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
+from plaid.model.link_token_get_request import LinkTokenGetRequest
+from typing import Dict, Tuple
 from plaid.api_client import ApiClient
 
 # Configure logging
@@ -125,14 +129,87 @@ def get_access_token(public_token: str) -> str:
         raise
 
 
+def create_link_token(user_id: str, client_name: str = "Personal Budget Tracker") -> str:
+    """
+    [LEGACY METHOD] Create a link token for Plaid Link initialization
+    Consider using create_hosted_link_token instead for a more streamlined integration.
+    Args:
+        user_id: The user ID for the current user
+        client_name: The name of your application
+
+    Returns:
+        str: The link token
+    """
+    try:
+        request = LinkTokenCreateRequest(
+            client_name=client_name,
+            language="en",
+            country_codes=[CountryCode("US")],
+            user=LinkTokenCreateRequestUser(
+                client_user_id=str(user_id)
+            ),
+            products=[Products("transactions")],
+            webhook="https://webhook.example.com",  # Replace with your actual webhook URL in production
+        )
+
+        response = retry_api_call(client.link_token_create, request)
+        return response['link_token']
+    except Exception as e:
+        logger.error(f"Error creating link token: {str(e)}")
+        raise Exception(f"Error creating link token: {str(e)}")
+
+def create_hosted_link_token(user_id: str, redirect_uri: str, client_name: str = "Personal Budget Tracker") -> Dict[str, str]:
+    """
+    Create a link token with Plaid Hosted Link support
+
+    This method creates a link token that can be used with Plaid's Hosted Link flow,
+    which provides a ready-to-use UI hosted by Plaid.
+
+    Args:
+        user_id: The user ID for the current user
+        redirect_uri: The URI to redirect to after the Link flow is completed
+        client_name: The name of your application
+
+    Returns:
+        Dict with both link_token and hosted_link_url
+    """
+    try:
+        request = LinkTokenCreateRequest(
+            client_name=client_name,
+            language="en",
+            country_codes=[CountryCode("US")],
+            user=LinkTokenCreateRequestUser(
+                client_user_id=str(user_id)
+            ),
+            products=[Products("transactions")],
+            webhook="https://webhook.example.com",  # Replace with your actual webhook URL in production
+            redirect_uri=redirect_uri,
+            hosted_link={}  # An empty object enables Hosted Link
+        )
+
+        response = retry_api_call(client.link_token_create, request)
+        
+        # Construct the hosted link URL using the link_token
+        # Format is typically: https://{environment}.plaid.com/link/token/{link_token}
+        base_url = host_map[PLAID_ENV].replace("https://", "https://link.")
+        hosted_link_url = f"{base_url}/token/{response.link_token}"
+        
+        return {
+            "link_token": response.link_token,
+            "hosted_link_url": hosted_link_url
+        }
+    except Exception as e:
+        logger.error(f"Error creating hosted link token: {str(e)}")
+        raise Exception(f"Error creating hosted link token: {str(e)}")
+
 def sync_transactions(access_token: str, cursor: str = "") -> Dict[str, Any]:
     """
     Sync transactions from Plaid API
-    
+
     Args:
         access_token: The Plaid access token
         cursor: The cursor for pagination (optional)
-        
+
     Returns:
         Dict with transaction data and next cursor
     """
@@ -140,7 +217,7 @@ def sync_transactions(access_token: str, cursor: str = "") -> Dict[str, Any]:
     modified = []
     removed = []
     has_more = True
-    
+
     # For debug purposes, limit the number of pagination loops
     max_loops = 5
     loop_count = 0
@@ -156,7 +233,7 @@ def sync_transactions(access_token: str, cursor: str = "") -> Dict[str, Any]:
             )
             # Use retry logic for API call
             response = retry_api_call(client.transactions_sync, request)
-            
+
             logger.info(f"Received batch: {len(response.get('added', []))} added, " +
                        f"{len(response.get('modified', []))} modified, " +
                        f"{len(response.get('removed', []))} removed")
@@ -165,18 +242,18 @@ def sync_transactions(access_token: str, cursor: str = "") -> Dict[str, Any]:
             added.extend([tx.to_dict() for tx in response.get('added', [])])
             modified.extend([tx.to_dict() for tx in response.get('modified', [])])
             removed.extend([tx.to_dict() for tx in response.get('removed', [])])
-            
+
             has_more = response['has_more']
             cursor = response['next_cursor']
             loop_count += 1
-            
+
             if has_more and loop_count >= max_loops:
                 logger.warning(f"Reached maximum pagination loops ({max_loops}), returning partial results")
-                
+
         # Note: The actual DB save logic is implemented in app/services/plaid_service.py
         # This function only fetches data from Plaid and returns it
         logger.info(f"Sync complete: {len(added)} new, {len(modified)} modified, {len(removed)} removed transactions")
-        
+
         # Return structured response with actual transaction data
         return {
             "status": "success",

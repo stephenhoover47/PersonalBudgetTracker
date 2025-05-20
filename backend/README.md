@@ -64,6 +64,68 @@ alembic upgrade head
 alembic downgrade -1
 ```
 
+## Plaid Integration
+
+### Using Plaid Link
+
+The backend provides endpoints for integrating with Plaid Link, including support for Plaid Hosted Link:
+
+#### Regular Link
+1. Create a Link Token (Legacy method):
+```
+POST /plaid/create_link_token/
+{
+  "user_id": 1,
+  "client_name": "Personal Budget Tracker"
+}
+```
+Returns a link token that can be used to initialize Plaid Link on the frontend.
+
+#### Hosted Link (Recommended)
+2. Create a Hosted Link:
+```
+POST /plaid/create_hosted_link/
+{
+  "user_id": 1,
+  "redirect_uri": "https://yourapp.com/plaid/callback",
+  "client_name": "Personal Budget Tracker"
+}
+```
+Returns both a link token and a hosted_link_url. The hosted_link_url can be used to redirect users directly to Plaid's hosted Link interface without needing to implement Plaid Link in your frontend.
+
+#### Common Endpoints
+3. Exchange Public Token:
+```
+POST /plaid/exchange_token/
+{
+  "public_token": "public-token-from-plaid-link",
+  "user_id": 1,
+  "institution_id": "ins_123456",
+  "institution_name": "Bank Name"
+}
+```
+Exchanges the public token for an access token and stores the Plaid item in the database.
+
+4. Sync Transactions:
+```
+POST /plaid/sync_transactions/
+{
+  "access_token": "access-token",
+  "user_id": 1,
+  "cursor": "optional-cursor-for-pagination"
+}
+```
+Syncs transactions for the specified Plaid item and user.
+
+### Sandbox Testing
+
+For testing in the Plaid sandbox environment:
+
+```
+GET /plaid/sandbox_token/
+```
+Returns a sandbox public token that can be used for testing.
+
 ## Analytics
 
 The application includes SQL-based analytics for generating reports:
@@ -75,6 +137,10 @@ The application includes SQL-based analytics for generating reports:
 - Spending trends over time
 - Account balances
 - Transaction statistics
+- Recurring transactions identification
+- Category breakdown by year
+- Spending patterns by day of week
+- Savings rate analysis
 
 ## Neon PostgreSQL Setup
 
