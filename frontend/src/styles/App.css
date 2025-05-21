@@ -1,0 +1,23 @@
+/* src/styles/App.css */
+/* CSS styles specific to the App component */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh; /* Ensure the app takes up at least the full viewport height */
+}
+
+.main-content {
+  flex: 1; /* This makes the main content grow to fill available space */
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .main-content {
+    padding: 16px;
+  }
+}

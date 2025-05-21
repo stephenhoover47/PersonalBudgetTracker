@@ -1,0 +1,38 @@
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "webpack serve --mode development --open",
+    "dev": "webpack serve --mode development --open",
+    "build": "webpack --mode production",
+    "serve": "node server.js",
+    "start:prod": "npm run build && npm run serve",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Personal Budget Tracker Frontend with Plaid Link integration",
+  "dependencies": {
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.5",
+    "axios": "^1.9.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-plaid-link": "^4.0.1",
+    "react-router-dom": "^6.30.0",
+    "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "css-loader": "^7.1.2",
+    "html-webpack-plugin": "^5.6.3",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.5.2",
+    "webpack": "^5.99.9",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.1"
+  }
+}

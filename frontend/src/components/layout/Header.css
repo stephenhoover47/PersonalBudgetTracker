@@ -1,0 +1,101 @@
+/* src/components/layout/Header.css */
+/* Styles for the Header component */
+
+.header {
+  background-color: var(--card-background);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 12px 0;
+}
+
+.header-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo a {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.nav-list {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-item {
+  margin: 0 15px;
+}
+
+.nav-link {
+  color: var(--text-color);
+  text-decoration: none;
+  font-size: 1rem;
+  transition: color 0.3s;
+}
+
+.nav-link:hover {
+  color: var(--primary-color);
+}
+
+.auth-buttons {
+  display: flex;
+  align-items: center;
+}
+
+.welcome-text {
+  margin-right: 15px;
+  color: var(--light-text);
+}
+
+.login-button, .register-button {
+  padding: 8px 16px;
+  margin-left: 10px;
+  border-radius: var(--border-radius);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.login-button {
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  background-color: transparent;
+}
+
+.register-button, .logout-button {
+  color: white;
+  background-color: var(--primary-color);
+  border: none;
+  cursor: pointer;
+}
+
+/* Responsive styles for smaller screens */
+@media (max-width: 768px) {
+  .header-container {
+    flex-direction: column;
+    padding: 10px;
+  }
+  
+  .logo {
+    margin-bottom: 10px;
+  }
+  
+  .nav-list {
+    margin: 10px 0;
+  }
+  
+  .nav-item {
+    margin: 0 8px;
+  }
+  
+  .auth-buttons {
+    margin-top: 10px;
+  }
+}

@@ -1,0 +1,42 @@
+/* src/pages/PlaidLink.css */
+/* Styles for the PlaidLink component */
+
+.plaid-card {
+  max-width: 600px;
+  margin: 40px auto;
+  text-align: center;
+}
+
+.plaid-button {
+  background-color: var(--secondary-color);
+  margin: 20px auto;
+  display: block;
+  padding: 12px 24px;
+  font-size: 1.1rem;
+}
+
+.plaid-button:hover {
+  background-color: #1976D2;
+}
+
+.plaid-info {
+  margin-top: 20px;
+  color: var(--light-text);
+  font-size: 0.9rem;
+}
+
+.loading {
+  margin: 20px 0;
+  padding: 15px;
+  background-color: #f5f5f5;
+  border-radius: var(--border-radius);
+  color: var(--light-text);
+}
+
+.success-message {
+  margin: 20px 0;
+  padding: 15px;
+  background-color: rgba(76, 175, 80, 0.1);
+  border-radius: var(--border-radius);
+  color: var(--success-color);
+}

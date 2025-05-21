@@ -13,8 +13,6 @@ from plaid.model.country_code import CountryCode
 from plaid.model.sandbox_public_token_create_request import SandboxPublicTokenCreateRequest
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
-from plaid.model.link_token_get_request import LinkTokenGetRequest
-from typing import Dict, Tuple
 from plaid.api_client import ApiClient
 
 # Configure logging
@@ -131,8 +129,8 @@ def get_access_token(public_token: str) -> str:
 
 def create_link_token(user_id: str, client_name: str = "Personal Budget Tracker") -> str:
     """
-    [LEGACY METHOD] Create a link token for Plaid Link initialization
-    Consider using create_hosted_link_token instead for a more streamlined integration.
+    Create a link token for Plaid Link initialization
+    
     Args:
         user_id: The user ID for the current user
         client_name: The name of your application
@@ -157,50 +155,6 @@ def create_link_token(user_id: str, client_name: str = "Personal Budget Tracker"
     except Exception as e:
         logger.error(f"Error creating link token: {str(e)}")
         raise Exception(f"Error creating link token: {str(e)}")
-
-def create_hosted_link_token(user_id: str, redirect_uri: str, client_name: str = "Personal Budget Tracker") -> Dict[str, str]:
-    """
-    Create a link token with Plaid Hosted Link support
-
-    This method creates a link token that can be used with Plaid's Hosted Link flow,
-    which provides a ready-to-use UI hosted by Plaid.
-
-    Args:
-        user_id: The user ID for the current user
-        redirect_uri: The URI to redirect to after the Link flow is completed
-        client_name: The name of your application
-
-    Returns:
-        Dict with both link_token and hosted_link_url
-    """
-    try:
-        request = LinkTokenCreateRequest(
-            client_name=client_name,
-            language="en",
-            country_codes=[CountryCode("US")],
-            user=LinkTokenCreateRequestUser(
-                client_user_id=str(user_id)
-            ),
-            products=[Products("transactions")],
-            webhook="https://webhook.example.com",  # Replace with your actual webhook URL in production
-            redirect_uri=redirect_uri,
-            hosted_link={}  # An empty object enables Hosted Link
-        )
-
-        response = retry_api_call(client.link_token_create, request)
-        
-        # Construct the hosted link URL using the link_token
-        # Format is typically: https://{environment}.plaid.com/link/token/{link_token}
-        base_url = host_map[PLAID_ENV].replace("https://", "https://link.")
-        hosted_link_url = f"{base_url}/token/{response.link_token}"
-        
-        return {
-            "link_token": response.link_token,
-            "hosted_link_url": hosted_link_url
-        }
-    except Exception as e:
-        logger.error(f"Error creating hosted link token: {str(e)}")
-        raise Exception(f"Error creating hosted link token: {str(e)}")
 
 def sync_transactions(access_token: str, cursor: str = "") -> Dict[str, Any]:
     """

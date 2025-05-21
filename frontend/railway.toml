@@ -1,0 +1,30 @@
+# Railway configuration file for the frontend
+# This tells Railway how to build and deploy your frontend application
+
+# Build settings
+[build]
+  # Command to build the frontend - creates the optimized production build
+  builder = "NIXPACKS"
+  buildCommand = "npm install && npm run build"
+  
+  # The directory where your static files are output (the webpack output directory)
+  # Not used directly by Railway, but useful for reference
+  publishDir = "dist"
+
+# Deployment settings
+[deploy]
+  # Command to start the server
+  startCommand = "node server.js"
+  # The healthcheck path Railway will use to verify your service is running
+  healthcheckPath = "/health"
+  # How long to wait for the healthcheck to succeed
+  healthcheckTimeout = 100
+  # Restart the service if the healthcheck fails
+  restartPolicyType = "ON_FAILURE"
+
+# Environment settings
+[variables]
+  # The NODE_ENV should be production in deployment
+  NODE_ENV = "production"
+  # You can set your backend API URL here if needed
+  # API_URL = "https://your-backend-railway-url.up.railway.app"
