@@ -1,50 +1,21 @@
 {
   "compilerOptions": {
-    // Specifies the JavaScript version for the emitted code
     "target": "es5",
-    
-    // List of library files to be included in the compilation
     "lib": ["dom", "dom.iterable", "esnext"],
-    
-    // Allow JavaScript files to be compiled
     "allowJs": true,
-    
-    // Skip type checking of declaration files
     "skipLibCheck": true,
-    
-    // Enables compatibility with CommonJS and ES modules
     "esModuleInterop": true,
-    
-    // Allows import statements to use default imports from modules with no default export
     "allowSyntheticDefaultImports": true,
-    
-    // Enable all strict type checking options
     "strict": true,
-    
-    // Ensures consistent casing in file names (important for case-sensitive file systems)
     "forceConsistentCasingInFileNames": true,
-    
-    // Prevents accidentally falling through switch statement cases
     "noFallthroughCasesInSwitch": true,
-    
-    // Specifies how module code is generated (esnext supports import/export)
     "module": "esnext",
-    
-    // Strategy used to resolve modules (node follows Node.js resolution)
     "moduleResolution": "node",
-    
-    // Allows importing JSON files as modules
     "resolveJsonModule": true,
-    
-    // Makes sure each file can be safely transpiled without knowledge of other files
     "isolatedModules": true,
-    
-    // TypeScript will only check types but not emit JavaScript files
-    "noEmit": true,
-    
-    // Support for JSX in .tsx files (react-jsx doesn't require React import)
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "outDir": "./dist",
+    "noEmit": false
   },
-  // Files to include in compilation
   "include": ["src"]
 }
