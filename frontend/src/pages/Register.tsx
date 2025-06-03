@@ -8,7 +8,7 @@ import './AuthPages.css';
 
 const Register: React.FC = () => {
   // State for form inputs
-  const [username, setUsername] = useState<string>('');
+  const [fullName, setFullName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
@@ -44,7 +44,7 @@ const Register: React.FC = () => {
     clearError();
     
     // Simple validation
-    if (!username || !email || !password || !confirmPassword) {
+    if (!fullName || !email || !password || !confirmPassword) {
       setFormError('Please fill in all fields');
       return;
     }
@@ -62,7 +62,7 @@ const Register: React.FC = () => {
     }
     
     // Attempt to register
-    const success = await register(username, email, password);
+    const success = await register(fullName, email, password);
     
     // Redirect on successful registration
     if (success) {
@@ -84,13 +84,13 @@ const Register: React.FC = () => {
         
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="username">Username</label>
+            <label htmlFor="fullName">Full Name</label>
             <input
               type="text"
-              id="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Choose a username"
+              id="fullName"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Enter your full name"
               required
             />
           </div>

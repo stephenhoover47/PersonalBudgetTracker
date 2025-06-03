@@ -8,7 +8,8 @@ import { login as apiLogin, register as apiRegister, getCurrentUser, handleApiEr
 interface User {
   id: number;
   email: string;
-  username: string;
+  full_name: string;
+  is_active: boolean;
 }
 
 // Define the shape of our auth context
@@ -22,7 +23,7 @@ interface AuthContextType {
   // Function to log the user in
   login: (email: string, password: string) => Promise<boolean>;
   // Function to register a new user
-  register: (username: string, email: string, password: string) => Promise<boolean>;
+  register: (full_name: string, email: string, password: string) => Promise<boolean>;
   // Function to log the user out
   logout: () => void;
   // Any error messages from auth operations
@@ -92,13 +93,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setError(null);
       
       // Call the login API
-      const response = await apiLogin({ email, password });
+      const loginResponse = await apiLogin({ email, password });
       
       // Store token in localStorage for persistence
-      localStorage.setItem('token', response.token);
+      localStorage.setItem('token', loginResponse.access_token);
+      
+      // Get user data after successful login
+      const userData = await getCurrentUser();
       
       // Update state with user data
-      setUser(response.user);
+      setUser(userData);
       setIsAuthenticated(true);
       return true;
     } catch (err) {
@@ -110,19 +114,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Function to register a new user
-  const register = async (username: string, email: string, password: string): Promise<boolean> => {
+  const register = async (full_name: string, email: string, password: string): Promise<boolean> => {
     try {
       setLoading(true);
       setError(null);
       
       // Call the register API
-      const response = await apiRegister({ username, email, password });
+      const userData = await apiRegister({ full_name, email, password });
+      
+      // Registration successful, now login to get token
+      const loginResponse = await apiLogin({ email, password });
       
       // Store token in localStorage for persistence
-      localStorage.setItem('token', response.token);
+      localStorage.setItem('token', loginResponse.access_token);
       
       // Update state with user data
-      setUser(response.user);
+      setUser(userData);
       setIsAuthenticated(true);
       return true;
     } catch (err) {

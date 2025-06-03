@@ -34,35 +34,38 @@ interface LoginRequest {
 }
 
 interface RegisterRequest {
-  username: string;
+  full_name: string;
   email: string;
   password: string;
 }
 
-interface AuthResponse {
-  token: string;
-  user: {
-    id: number;
-    username: string;
-    email: string;
-  };
+interface LoginResponse {
+  access_token: string;
+  token_type: string;
+}
+
+interface UserResponse {
+  id: number;
+  full_name: string;
+  email: string;
+  is_active: boolean;
 }
 
 // Function to login a user
-export const login = async (credentials: LoginRequest): Promise<AuthResponse> => {
-  const response = await api.post<AuthResponse>('/auth/login', credentials);
+export const login = async (credentials: LoginRequest): Promise<LoginResponse> => {
+  const response = await api.post<LoginResponse>('/auth/login', credentials);
   return response.data;
 };
 
 // Function to register a new user
-export const register = async (userData: RegisterRequest): Promise<AuthResponse> => {
-  const response = await api.post<AuthResponse>('/auth/register', userData);
+export const register = async (userData: RegisterRequest): Promise<UserResponse> => {
+  const response = await api.post<UserResponse>('/auth/register', userData);
   return response.data;
 };
 
 // Function to get current user's profile
-export const getCurrentUser = async (): Promise<AuthResponse['user']> => {
-  const response = await api.get<AuthResponse['user']>('/auth/me');
+export const getCurrentUser = async (): Promise<UserResponse> => {
+  const response = await api.get<UserResponse>('/auth/me');
   return response.data;
 };
 
