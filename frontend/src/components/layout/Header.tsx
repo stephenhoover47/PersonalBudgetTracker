@@ -52,7 +52,7 @@ const Header: React.FC = () => {
             <>
               {/* User is logged in - show user info and logout */}
               <span className="welcome-text">
-                Welcome, {user?.username || 'User'}
+                Welcome, {user?.full_name || 'User'}
               </span>
               <button 
                 className="logout-button" 
