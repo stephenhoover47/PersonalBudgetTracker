@@ -2,11 +2,8 @@
 // Configuration for API endpoints
 
 // Base URL for API requests
-// In development, this will use the proxy set up in webpack.config.js
-// In production, set this to your actual backend URL
-export const API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? 'https://personalbudgettrackerdev.up.railway.app/' // Replace with your actual Railway app URL
-  : '/api';
+// Point directly to Railway backend for both dev and prod
+export const API_BASE_URL = 'https://personalbudgettrackerdev.up.railway.app';
 
 // Timeout for API requests (in milliseconds)
 export const API_TIMEOUT = 10000;
