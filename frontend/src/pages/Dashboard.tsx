@@ -12,7 +12,7 @@ const Dashboard: React.FC = () => {
     <div className="container">
       <div className="card">
         <h1>Dashboard</h1>
-        <p>Welcome, {user?.username || 'User'}!</p>
+        <p>Welcome, {user?.full_name || 'User'}!</p>
         
         <div style={{ margin: '20px 0' }}>
           <Link to="/link-account">
@@ -22,7 +22,7 @@ const Dashboard: React.FC = () => {
         
         <div className="info-card">
           <h2>User Information</h2>
-          <p><strong>Username:</strong> {user?.username}</p>
+          <p><strong>Full Name:</strong> {user?.full_name}</p>
           <p><strong>Email:</strong> {user?.email}</p>
           <p><strong>User ID:</strong> {user?.id}</p>
         </div>
