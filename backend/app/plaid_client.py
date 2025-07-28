@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from plaid.model.transactions_sync_request_options import TransactionsSyncRequestOptions
+from plaid.model.accounts_balance_get_request import AccountsBalanceGetRequest
 from plaid.api import plaid_api
 from plaid.configuration import Configuration
 from plaid.model.products import Products
@@ -222,4 +223,28 @@ def sync_transactions(access_token: str, cursor: str = "") -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Error syncing transactions: {str(e)}")
+        raise
+
+def sync_accounts(access_token: str) -> List[Dict[str, Any]]:
+    """
+    Get account balances from Plaid API
+    
+    Args:
+        access_token: The Plaid access token
+        
+    Returns:
+        List of account data dictionaries
+    """
+    try:
+        request = AccountsBalanceGetRequest(access_token=access_token)
+        response = retry_api_call(client.accounts_balance_get, request)
+        
+        # Convert Plaid objects to dictionaries
+        accounts = [account.to_dict() for account in response.get('accounts', [])]
+        
+        logger.info(f"Retrieved {len(accounts)} accounts from Plaid")
+        return accounts
+        
+    except Exception as e:
+        logger.error(f"Error syncing accounts: {str(e)}")
         raise

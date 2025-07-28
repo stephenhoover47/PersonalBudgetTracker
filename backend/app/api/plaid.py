@@ -114,4 +114,42 @@ def sync_plaid_transactions(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to sync transactions: {str(e)}"
         )
+
+@router.post("/sync_all/")
+def sync_all_transactions(
+    user_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Sync transactions for all linked accounts (admin endpoint)
+    """
+    try:
+        from scripts.sync_transactions import sync_all_transactions as sync_all
+        
+        result = sync_all(db, user_id=user_id, dry_run=False)
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync all transactions: {str(e)}"
+        )
+
+@router.post("/sync_all_dry_run/")
+def sync_all_transactions_dry_run(
+    user_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Dry run sync for all linked accounts (for testing)
+    """
+    try:
+        from scripts.sync_transactions import sync_all_transactions as sync_all
+        
+        result = sync_all(db, user_id=user_id, dry_run=True)
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync all transactions: {str(e)}"
+        )
         
