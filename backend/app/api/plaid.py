@@ -282,15 +282,119 @@ def sync_accounts_endpoint(
     Sync account data from Plaid to populate the accounts table
     """
     try:
-        from scripts.sync_accounts import sync_all_accounts
+        # Get Plaid items to sync
+        if plaid_item_id:
+            plaid_items = [db.query(PlaidItem).filter(PlaidItem.id == plaid_item_id).first()]
+            if not plaid_items[0]:
+                return {
+                    "status": "error",
+                    "message": f"Plaid item {plaid_item_id} not found"
+                }
+        else:
+            plaid_items = db.query(PlaidItem).all()
         
-        sync_all_accounts(db, plaid_item_id)
+        if not plaid_items:
+            return {
+                "status": "error",
+                "message": "No Plaid items found to sync"
+            }
+        
+        print(f"Found {len(plaid_items)} Plaid items to sync")
+        
+        total_accounts = 0
+        sync_results = []
+        
+        for item in plaid_items:
+            user = db.query(User).filter(User.id == item.user_id).first()
+            print(f"Syncing accounts for {user.full_name if user else 'Unknown'} (Item {item.id})...")
+            print(f"Institution: {item.institution_name}")
+            print(f"Plaid Item ID: {item.plaid_item_id}")
+            print(f"Access Token: {'Present' if item.plaid_access_token else 'Missing'}")
+            
+            try:
+                from app.plaid_client import sync_accounts
+                
+                # Get accounts from Plaid
+                plaid_accounts = sync_accounts(item.plaid_access_token)
+                
+                if not plaid_accounts:
+                    print(f"No accounts found for {item.institution_name}")
+                    sync_results.append({
+                        "item_id": item.id,
+                        "institution": item.institution_name,
+                        "accounts_found": 0,
+                        "accounts_added": 0,
+                        "error": None
+                    })
+                    continue
+                
+                print(f"Plaid returned {len(plaid_accounts)} accounts")
+                
+                # Process each account
+                added_count = 0
+                for account_data in plaid_accounts:
+                    # Check if account already exists
+                    existing_account = db.query(Account).filter(
+                        Account.plaid_account_id == account_data.get("account_id"),
+                        Account.plaid_item_id == item.id
+                    ).first()
+                    
+                    if existing_account:
+                        print(f"Account {account_data.get('name')} already exists")
+                        continue
+                    
+                    # Create new account
+                    account = Account(
+                        user_id=item.user_id,
+                        plaid_item_id=item.id,
+                        plaid_account_id=account_data.get("account_id"),
+                        name=account_data.get("name"),
+                        official_name=account_data.get("official_name"),
+                        account_type=account_data.get("type"),
+                        account_subtype=account_data.get("subtype"),
+                        mask=account_data.get("mask"),
+                        available_balance=account_data.get("balances", {}).get("available"),
+                        current_balance=account_data.get("balances", {}).get("current"),
+                        currency_code=account_data.get("balances", {}).get("iso_currency_code", "USD")
+                    )
+                    
+                    db.add(account)
+                    added_count += 1
+                    print(f"Added account: {account_data.get('name')} ({account_data.get('type')})")
+                
+                # Commit the accounts
+                db.commit()
+                
+                total_accounts += added_count
+                sync_results.append({
+                    "item_id": item.id,
+                    "institution": item.institution_name,
+                    "accounts_found": len(plaid_accounts),
+                    "accounts_added": added_count,
+                    "error": None
+                })
+                
+                print(f"Successfully added {added_count} accounts for {item.institution_name}")
+                
+            except Exception as e:
+                print(f"Error syncing accounts for {item.institution_name}: {str(e)}")
+                db.rollback()
+                sync_results.append({
+                    "item_id": item.id,
+                    "institution": item.institution_name,
+                    "accounts_found": 0,
+                    "accounts_added": 0,
+                    "error": str(e)
+                })
         
         return {
             "status": "success",
-            "message": "Account sync completed successfully",
-            "plaid_item_id": plaid_item_id
+            "message": f"Account sync completed - {total_accounts} total accounts added",
+            "plaid_item_id": plaid_item_id,
+            "total_accounts_added": total_accounts,
+            "sync_results": sync_results
         }
+        
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
