@@ -177,6 +177,11 @@ def sync_historical_transactions(
             "pull_all_available": pull_all_available,
             "plaid_item_id": plaid_item_id
         }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync historical transactions: {str(e)}"
+        )
 
 @router.get("/debug_historical/")
 def debug_historical_sync(db: Session = Depends(get_db)) -> Dict[str, Any]:
@@ -184,41 +189,42 @@ def debug_historical_sync(db: Session = Depends(get_db)) -> Dict[str, Any]:
     Debug endpoint to check why historical sync isn't working
     """
     try:
-        from scripts.debug_historical_sync import debug_plaid_connection, test_historical_sync
+        # Simple debug without complex imports
+        plaid_items = db.query(PlaidItem).all()
         
-        # Capture the output
-        import io
-        import sys
+        debug_info = {
+            "plaid_items_count": len(plaid_items),
+            "plaid_items": []
+        }
         
-        # Redirect stdout to capture output
-        old_stdout = sys.stdout
-        sys.stdout = io.StringIO()
-        
-        try:
-            # Run debug functions
-            plaid_items = debug_plaid_connection()
-            if plaid_items:
-                test_historical_sync()
+        for item in plaid_items:
+            user = db.query(User).filter(User.id == item.user_id).first()
+            accounts = db.query(Account).filter(Account.plaid_item_id == item.id).all()
             
-            # Get the captured output
-            output = sys.stdout.getvalue()
-        finally:
-            sys.stdout = old_stdout
+            item_info = {
+                "id": item.id,
+                "user_id": item.user_id,
+                "user_name": user.full_name if user else "Unknown",
+                "institution": item.institution_name,
+                "accounts_count": len(accounts),
+                "accounts": [
+                    {
+                        "id": acc.id,
+                        "name": acc.name,
+                        "plaid_account_id": acc.plaid_account_id,
+                        "account_type": acc.account_type
+                    } for acc in accounts
+                ]
+            }
+            debug_info["plaid_items"].append(item_info)
         
         return {
             "status": "success",
-            "debug_output": output,
-            "plaid_items_count": len(plaid_items) if plaid_items else 0
+            "debug_info": debug_info
         }
     except Exception as e:
         return {
             "status": "error",
-            "error": str(e),
-            "debug_output": "Failed to run debug script"
+            "error": str(e)
         }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to sync historical transactions: {str(e)}"
-        )
         
