@@ -177,6 +177,45 @@ def sync_historical_transactions(
             "pull_all_available": pull_all_available,
             "plaid_item_id": plaid_item_id
         }
+
+@router.get("/debug_historical/")
+def debug_historical_sync(db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """
+    Debug endpoint to check why historical sync isn't working
+    """
+    try:
+        from scripts.debug_historical_sync import debug_plaid_connection, test_historical_sync
+        
+        # Capture the output
+        import io
+        import sys
+        
+        # Redirect stdout to capture output
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        
+        try:
+            # Run debug functions
+            plaid_items = debug_plaid_connection()
+            if plaid_items:
+                test_historical_sync()
+            
+            # Get the captured output
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        
+        return {
+            "status": "success",
+            "debug_output": output,
+            "plaid_items_count": len(plaid_items) if plaid_items else 0
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "debug_output": "Failed to run debug script"
+        }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
