@@ -66,12 +66,15 @@ def exchange_token(
     Exchange a public token for an access token and store the Plaid item
     """
     try:
-        # Exchange the public token for an access token
-        access_token = get_access_token(request.public_token)
+        # Exchange the public token for an access token and item ID
+        token_response = get_access_token(request.public_token)
+        access_token = token_response['access_token']
+        plaid_item_id = token_response['item_id']
         
         # Store the Plaid item in the database
         plaid_item = PlaidItem(
             user_id=request.user_id,
+            plaid_item_id=plaid_item_id,
             plaid_access_token=access_token,
             institution_id=request.institution_id,
             institution_name=request.institution_name

@@ -109,20 +109,23 @@ def create_sandbox_public_token():
         logger.error(f"Error creating sandbox public token: {str(e)}")
         raise Exception(f"Error creating sandbox public token: {str(e)}")
 
-def get_access_token(public_token: str) -> str:
+def get_access_token(public_token: str) -> Dict[str, str]:
     """
-    Exchange a public token for an access token
+    Exchange a public token for an access token and item ID
     
     Args:
         public_token: The public token from Plaid Link
         
     Returns:
-        str: The access token
+        Dict containing access_token and item_id
     """
     try:
         request = ItemPublicTokenExchangeRequest(public_token=public_token)
         response = retry_api_call(client.item_public_token_exchange, request)
-        return response['access_token']
+        return {
+            'access_token': response['access_token'],
+            'item_id': response['item_id']
+        }
     except Exception as e:
         logger.error(f"Error exchanging public token: {str(e)}")
         raise
