@@ -152,4 +152,34 @@ def sync_all_transactions_dry_run(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to sync all transactions: {str(e)}"
         )
+
+@router.post("/sync_historical/")
+def sync_historical_transactions(
+    pull_all_available: bool = True,
+    plaid_item_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Sync historical transactions for all linked accounts
+    
+    Args:
+        pull_all_available: If True, pull maximum available data (up to 2 years)
+        plaid_item_id: Optional specific Plaid item ID to sync
+    """
+    try:
+        from scripts.pull_historical_transactions import sync_historical_transactions as sync_historical
+        
+        sync_historical(db, plaid_item_id, pull_all_available)
+        
+        return {
+            "status": "success",
+            "message": f"Historical sync completed - pulled maximum available data from Plaid",
+            "pull_all_available": pull_all_available,
+            "plaid_item_id": plaid_item_id
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync historical transactions: {str(e)}"
+        )
         

@@ -14,7 +14,8 @@
       "name": "transaction-sync",
       "command": "python railway_sync.py",
       "schedule": "0 5 * * *",
-      "timezone": "America/New_York"
+      "timezone": "America/New_York",
+      "description": "Daily transaction sync at midnight ET (5 AM UTC)"
     }
   ]
 } 
