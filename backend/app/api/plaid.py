@@ -231,6 +231,48 @@ def debug_historical_sync(db: Session = Depends(get_db)) -> Dict[str, Any]:
             "error": str(e)
         }
 
+@router.post("/cleanup_null_items/")
+def cleanup_null_items_endpoint(db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """
+    Clean up Plaid items with NULL plaid_item_id in the cloud database
+    """
+    try:
+        # Find items with NULL plaid_item_id
+        null_items = db.query(PlaidItem).filter(PlaidItem.plaid_item_id.is_(None)).all()
+        
+        if not null_items:
+            return {
+                "status": "success",
+                "message": "No Plaid items with NULL plaid_item_id found",
+                "items_cleaned": 0
+            }
+        
+        # Delete associated accounts first
+        for item in null_items:
+            accounts = db.query(Account).filter(Account.plaid_item_id == item.id).all()
+            for account in accounts:
+                db.delete(account)
+        
+        # Delete the Plaid items
+        items_deleted = len(null_items)
+        for item in null_items:
+            db.delete(item)
+        
+        db.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Cleaned up {items_deleted} Plaid items with NULL plaid_item_id",
+            "items_cleaned": items_deleted
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to cleanup NULL items: {str(e)}"
+        )
+
 @router.post("/sync_accounts/")
 def sync_accounts_endpoint(
     plaid_item_id: Optional[int] = None,
