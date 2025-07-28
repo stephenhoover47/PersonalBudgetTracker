@@ -30,8 +30,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('logs/sync_transactions.log'),
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler(sys.stdout)  # Only use stdout for Railway
     ]
 )
 logger = logging.getLogger(__name__)
@@ -199,8 +198,9 @@ def main():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     
-    # Create logs directory if it doesn't exist
-    os.makedirs("logs", exist_ok=True)
+    # Create logs directory if it doesn't exist (only for local development)
+    if os.getenv("RAILWAY_ENVIRONMENT") is None:
+        os.makedirs("logs", exist_ok=True)
     
     logger.info("Starting automated transaction sync")
     logger.info(f"Arguments: user_id={args.user_id}, dry_run={args.dry_run}, verbose={args.verbose}")

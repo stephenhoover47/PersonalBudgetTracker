@@ -124,9 +124,9 @@ def sync_all_transactions(
     Sync transactions for all linked accounts (admin endpoint)
     """
     try:
-        from scripts.sync_transactions import sync_all_transactions as sync_all
+        from railway_sync import sync_all_transactions as sync_all
         
-        result = sync_all(db, user_id=user_id, dry_run=False)
+        result = sync_all()
         return result
     except Exception as e:
         raise HTTPException(
@@ -143,9 +143,9 @@ def sync_all_transactions_dry_run(
     Dry run sync for all linked accounts (for testing)
     """
     try:
-        from scripts.sync_transactions import sync_all_transactions as sync_all
+        from railway_sync import sync_all_transactions as sync_all
         
-        result = sync_all(db, user_id=user_id, dry_run=True)
+        result = sync_all()
         return result
     except Exception as e:
         raise HTTPException(
