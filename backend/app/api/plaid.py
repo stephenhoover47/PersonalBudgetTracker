@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.db.models import PlaidItem, Account
+from app.db.models import PlaidItem, Account, User
 from app.plaid_client import get_access_token, create_sandbox_public_token, create_link_token
 from app.services.plaid_service import sync_transactions
 
