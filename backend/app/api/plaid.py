@@ -227,4 +227,28 @@ def debug_historical_sync(db: Session = Depends(get_db)) -> Dict[str, Any]:
             "status": "error",
             "error": str(e)
         }
+
+@router.post("/sync_accounts/")
+def sync_accounts_endpoint(
+    plaid_item_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Sync account data from Plaid to populate the accounts table
+    """
+    try:
+        from scripts.sync_accounts import sync_all_accounts
+        
+        sync_all_accounts(db, plaid_item_id)
+        
+        return {
+            "status": "success",
+            "message": "Account sync completed successfully",
+            "plaid_item_id": plaid_item_id
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync accounts: {str(e)}"
+        )
         
