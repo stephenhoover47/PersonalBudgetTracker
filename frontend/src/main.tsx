@@ -285,7 +285,7 @@ function App() {
   if (!me)
     return (
       <main className="login">
-        <div className="wordmark">◒ PocketWatcher</div>
+        <img className="login-logo" src="/brand/pocketwatcher-logo.png" alt="PocketWatcher" width="900" height="461" />
         <div className="login-card">
           <span className="eyebrow">A LITTLE CLARITY, TOGETHER</span>
           <h1>
@@ -340,8 +340,9 @@ function App() {
   return (
     <div className="shell">
       <aside>
-        <a className="wordmark" href="/">
-          ◒ PocketWatcher
+        <a className="wordmark brand" href="/" aria-label="PocketWatcher home">
+          <img className="brand-mark" src="/brand/pocketwatcher-mark.png" alt="" width="52" height="52" />
+          <span>PocketWatcher</span>
         </a>
         <span className="household">{me.household}</span>
         <nav>

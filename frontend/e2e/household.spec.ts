@@ -11,6 +11,8 @@ for (const viewport of [
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("/");
     await expect(page).toHaveTitle("PocketWatcher · Household budget");
+    await expect(page.getByRole("img", {name: "PocketWatcher", exact: true})).toBeVisible();
+    expect((await page.request.get("/brand/pocketwatcher-logo.png")).ok()).toBeTruthy();
     await page.getByLabel("Email", { exact: true }).fill("one@example.com");
     await page
       .getByLabel("Password", { exact: true })
@@ -19,6 +21,9 @@ for (const viewport of [
     await expect(
       page.getByRole("heading", { name: "A clear view, Stephen." }),
     ).toBeVisible();
+    await expect(page.getByRole("link", {name: "PocketWatcher home"})).toBeVisible();
+    const mark = page.locator(".brand-mark");
+    expect(await mark.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBeTruthy();
     await page.getByLabel("Budget month", { exact: true }).fill("2026-11");
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByLabel("Account name").fill("Joint card " + viewport.name);

@@ -799,6 +799,8 @@ def create_app(url=None, *, testing=False):
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
         if (dist / "icons").is_dir():
             app.mount("/icons", StaticFiles(directory=dist / "icons"), name="icons")
+        if (dist / "brand").is_dir():
+            app.mount("/brand", StaticFiles(directory=dist / "brand"), name="brand")
 
         def public_app_file(filename, media_type):
             def serve():
