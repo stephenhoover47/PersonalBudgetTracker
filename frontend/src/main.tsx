@@ -25,7 +25,7 @@ type BudgetCategory = Category & {
   spent_cents: number;
   remaining_cents: number;
 };
-type Saving = { id: number; name: string; cents: number };
+type Saving = { id: number; name: string; cents: number; inherited_from: string | null };
 type Dashboard = {
   spent_cents: number;
   budget_cents: number;
@@ -403,8 +403,9 @@ function App() {
           </div>
         )}
         {notice && (
-          <div className="success" role="status">
-            {notice}
+          <div className="success save-confirmation" role="status" aria-live="polite">
+            <span>✓ {notice}</span>
+            <button type="button" className="quiet" aria-label="Dismiss confirmation" onClick={() => setNotice("")}>✕</button>
           </div>
         )}
         {busy && (
@@ -416,9 +417,10 @@ function App() {
           <>
             <div className="hero">
               <div>
-                <span className="eyebrow">ROOM IN YOUR BUDGET</span>
+                <span className="eyebrow">LEFT IN YOUR SPENDING BUDGET</span>
                 <h2>{money(dashboard.remaining_cents)}</h2>
-                <p>Remaining after reviewed spending · {month}</p>
+                <p>Your spending limit minus spending so far · {month}</p>
+                <p className="hero-explanation">This is a budget estimate, not your bank balance. Savings plans are separate.</p>
               </div>
               <div className="hero-note">
                 A plan for the everyday.
@@ -428,15 +430,18 @@ function App() {
             </div>
             <div className="stats">
               <Stat
-                label="Reviewed spending"
+                label="Spent this month"
+                description="Categorized purchases and loan payments, minus refunds and reimbursements. Unreviewed transactions are excluded."
                 value={money(dashboard.spent_cents)}
               />
               <Stat
-                label="Budget + rollover"
+                label="Spending limit this month"
+                description="Your category budgets, plus unused money or overspending carried forward."
                 value={money(dashboard.budget_cents)}
               />
               <Stat
-                label="Planned savings"
+                label="Monthly savings target"
+                description="What you intend to save. This does not confirm that money was transferred."
                 value={money(dashboard.planned_savings_cents)}
               />
             </div>
@@ -1010,21 +1015,21 @@ function App() {
               ))}
             </section>
             <section className="panel">
-              <h2>Planned savings allocations</h2>
+              <h2>Monthly savings plans</h2>
               <p>
                 These earmarks sit separately from your spending budget. They do
                 not reduce “remaining budget” and never move money.
               </p>
-              <p>Savings allocations apply only to the selected month.</p>
+              <p>Plans repeat every month automatically. Changes apply from the selected month until a later saved override. Deleting stops the plan from that month; earlier history stays intact.</p>
               {dashboard.savings.map((s) => (
                 <SavingsRow key={`${month}-${s.id}-${s.name}-${s.cents}`} saving={s} busy={busy}
                   onSave={(name, amount) => void run(async () => {
                     await api(`/savings/${month}/${s.id}`, "PUT", {name, cents: amount});
-                    await load(); setNotice("Savings allocation updated.");
+                    await load(); setNotice("Savings plan saved. It will repeat in following months.");
                   })}
-                  onDelete={() => { if (window.confirm(`Delete ${s.name} for ${month}?`)) void run(async () => {
+                  onDelete={() => { if (window.confirm(`Stop ${s.name} from ${month} onward? Earlier months stay unchanged; a later saved override can restart it.`)) void run(async () => {
                     await api(`/savings/${month}/${s.id}`, "DELETE");
-                    await load(); setNotice("Savings allocation deleted.");
+                    await load(); setNotice("Savings plan stopped from this month onward.");
                   }); }} />
               ))}
               <form
@@ -1039,7 +1044,7 @@ function App() {
                     });
                     await load();
                     setNotice(
-                      "Allocation saved. Edit or delete it above.",
+                      "Allocation saved. This monthly target repeats automatically.",
                     );
                   });
                 }}
@@ -1210,11 +1215,12 @@ function App() {
     </div>
   );
 }
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, description }: { label: string; value: string; description?: string }) {
   return (
     <div className="stat">
       <span>{label}</span>
       <strong>{value}</strong>
+      {description && <small>{description}</small>}
     </div>
   );
 }
@@ -1286,9 +1292,9 @@ function SavingsRow({ saving, busy, onSave, onDelete }: {
     try { const value = cents(amount); if (value < 0) throw Error("Allocation must be nonnegative"); setError(""); onSave(name, value); }
     catch (err) { setError((err as Error).message); }
   }}>
-    <label>Goal name<input aria-label={`${saving.name} name`} value={name} required maxLength={100} onChange={e => setName(e.target.value)} /></label>
+    <label>Goal name{saving.inherited_from && <small>Repeating from {saving.inherited_from}</small>}<input aria-label={`${saving.name} name`} value={name} required maxLength={100} onChange={e => setName(e.target.value)} /></label>
     <label>Monthly allocation ($)<input aria-label={`${saving.name} allocation`} inputMode="decimal" value={amount} required onChange={e => setAmount(e.target.value)} /></label>
-    <button disabled={busy} className="secondary">Save changes</button>
+    <button disabled={busy} className="secondary">{busy ? "Saving…" : "Save changes"}</button>
     <button type="button" disabled={busy} className="quiet" onClick={onDelete}>Delete</button>
     {error && <span role="alert">{error}</span>}
   </form>;

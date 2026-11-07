@@ -121,6 +121,16 @@ for (const viewport of [
     const updatedGoal = page.getByRole("form", { name: "Edit Holiday", exact: true });
     await expect(updatedGoal).toBeVisible();
     await expect(updatedGoal.getByLabel("Holiday allocation", { exact: true })).toHaveValue("300.00");
+    await page.getByLabel("Budget month", { exact: true }).fill("2026-12");
+    await expect(updatedGoal.getByLabel("Holiday allocation", { exact: true })).toHaveValue("300.00");
+    await expect(updatedGoal.getByText("Repeating from 2026-11")).toBeVisible();
+    await updatedGoal.getByLabel("Holiday allocation", { exact: true }).fill("350");
+    await updatedGoal.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status").filter({hasText: "Savings plan saved"})).toBeInViewport();
+    await page.getByRole("button", {name: "Dismiss confirmation"}).click();
+    await page.getByLabel("Budget month", { exact: true }).fill("2027-01");
+    await expect(updatedGoal.getByLabel("Holiday allocation", { exact: true })).toHaveValue("350.00");
+    await page.getByLabel("Budget month", { exact: true }).fill("2026-12");
     page.once("dialog", dialog => dialog.accept());
     await updatedGoal.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(updatedGoal).not.toBeVisible();
@@ -128,7 +138,12 @@ for (const viewport of [
     await expect(page.getByLabel("Groceries budget", { exact: true })).toHaveValue("500.00");
     await expect(page.getByText("Repeating from 2026-11", { exact: false })).toBeVisible();
     await page.getByLabel("Budget month", { exact: true }).fill("2026-11");
+    await expect(updatedGoal.getByLabel("Holiday allocation", { exact: true })).toHaveValue("300.00");
+    page.once("dialog", dialog => dialog.accept());
+    await updatedGoal.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(updatedGoal).not.toBeVisible();
     await page.getByRole("button", { name: "Overview", exact: true }).click();
+    await expect(page.getByText("Monthly savings target", {exact: true})).toBeVisible();
     await page.screenshot({
       path: `test-results/${viewport.name}-overview.png`,
       fullPage: true,

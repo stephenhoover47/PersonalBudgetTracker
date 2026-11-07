@@ -793,3 +793,15 @@ select {
 .attention p { margin: 8px 0; }
 
 .panel > .category-link { margin-top: 0; }
+
+/* Keep confirmation visible even when saving near the bottom of a long plan. */
+.save-confirmation { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 100; width: min(540px, calc(100vw - 32px)); display: flex; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 8px 30px #183e3630; }
+.save-confirmation span { overflow-wrap: anywhere; }
+.save-confirmation button { flex-shrink: 0; }
+.stat small { display: block; margin-top: 12px; line-height: 1.5; }
+.hero > div { min-width: 0; }
+.hero .hero-explanation { margin-top: 12px; max-width: 460px; }
+.hero h2, .stat strong { overflow-wrap: anywhere; }
+@media (max-width: 700px) { .stats { grid-template-columns: 1fr; } .hero h2 { font-size: clamp(2rem, 9vw, 2.7rem); } }
+
+@media (max-width: 700px) { .save-confirmation { bottom: calc(84px + env(safe-area-inset-bottom)); } }

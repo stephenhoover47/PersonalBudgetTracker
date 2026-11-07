@@ -232,7 +232,8 @@ def test_savings_edit_delete_scope_and_conflicts(env):
     assert c.put(path, json={'name': 'Holiday', 'cents': 30000}).status_code == 200
     d = c.get('/api/dashboard?month=2026-11').json()
     assert d['planned_savings_cents'] == 40000 and d['spent_cents'] == 0
-    assert c.delete(path.replace('2026-11', '2026-12')).status_code == 404
+    path = f"/api/savings/2026-11/{next(s['id'] for s in d['savings'] if s['name'] == 'Holiday')}"
+    assert c.delete(path.replace('2026-11', '2026-10')).status_code == 404
     from household.models import Savings
     with app.state.factory() as db:
         other = Savings(household_id=2, name='Private', month='2026-11', cents=100)
@@ -263,3 +264,45 @@ def test_transaction_sorting_before_pagination(env):
     assert names(sort='largest', credits_first=True, limit=1) == ['Return']
     assert names(search='Big', credits_first=True) == ['Big']
     assert c.get('/api/transactions?month=2026-11&sort=invalid').status_code == 422
+
+
+
+def test_savings_repeat_override_stop_and_history(env):
+    c, _ = env
+    c.put('/api/savings/2026-11', json={'name': 'Travel', 'cents': 20000})
+    def goals(month):
+        return c.get(f'/api/dashboard?month={month}').json()['savings']
+    november = goals('2026-11')[0]
+    december = goals('2026-12')[0]
+    assert december['id'] == november['id']
+    assert december['inherited_from'] == '2026-11'
+    assert goals('2026-10') == []
+    path = f"/api/savings/2026-12/{december['id']}"
+    assert c.put(path, json={'name': 'Travel', 'cents': 30000}).status_code == 200
+    assert goals('2026-11')[0]['cents'] == 20000
+    assert goals('2027-01')[0]['cents'] == 30000
+    assert c.put(path, json={'name': 'Travel', 'cents': 40000}).status_code == 409
+    active = goals('2026-12')[0]
+    assert c.delete(f"/api/savings/2026-12/{active['id']}").status_code == 200
+    assert goals('2026-12') == goals('2027-05') == []
+    assert goals('2026-11')[0]['cents'] == 20000
+    c.put('/api/savings/2027-02', json={'name': 'Travel', 'cents': 10000})
+    assert goals('2027-03')[0]['cents'] == 10000
+    c.put('/api/savings/2027-03', json={'name': 'Travel', 'cents': 0})
+    assert goals('2027-04') == []
+
+
+def test_inherited_savings_rename_preserves_past_and_rejects_conflicts(env):
+    c, _ = env
+    c.put('/api/savings/2026-11', json={'name': 'Travel', 'cents': 20000})
+    c.put('/api/savings/2026-11', json={'name': 'House', 'cents': 10000})
+    def goals(month):
+        return c.get(f'/api/dashboard?month={month}').json()['savings']
+    source = next(g for g in goals('2026-12') if g['name'] == 'Travel')
+    path = f"/api/savings/2026-12/{source['id']}"
+    assert c.put(path, json={'name': 'House', 'cents': 100}).status_code == 409
+    assert c.put(path, json={'name': 'Holiday', 'cents': 30000}).status_code == 200
+    assert {g['name'] for g in goals('2026-11')} == {'Travel', 'House'}
+    assert {g['name'] for g in goals('2027-02')} == {'Holiday', 'House'}
+    d = c.get('/api/dashboard?month=2027-02').json()
+    assert d['planned_savings_cents'] == 40000 and d['spent_cents'] == 0

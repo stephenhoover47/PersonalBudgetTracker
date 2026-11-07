@@ -586,21 +586,42 @@ def create_app(url=None, *, testing=False):
         session.commit()
         return {"ok": True}
 
+    def effective_savings(session, user, month):
+        latest = {}
+        for row in session.scalars(select(Savings).where(
+            Savings.household_id == user.household_id, Savings.month <= month,
+        ).order_by(Savings.month, Savings.id)):
+            latest[row.name] = row
+        return latest
+
+    def set_savings(session, user, month, name, cents):
+        item = session.scalar(select(Savings).where(
+            Savings.household_id == user.household_id,
+            Savings.month == month, Savings.name == name,
+        ))
+        if item is None:
+            item = Savings(household_id=user.household_id, month=month, name=name)
+            session.add(item)
+        item.cents = cents
+        session.flush()
+        return item
+
+    def active_savings(session, user, month, ident):
+        item = owned(session, Savings, ident, user)
+        if item.month > month:
+            raise HTTPException(404, "Allocation not found")
+        latest = effective_savings(session, user, month).get(item.name)
+        if latest is None or latest.cents == 0:
+            raise HTTPException(404, "Allocation not found")
+        if latest.id != ident:
+            raise HTTPException(409, "Savings plan changed. Refresh before editing.")
+        return item
+
     @app.put("/api/savings/{month}")
     def savings(month: str, payload: SavingsIn, user=Depends(current), session=Depends(db)):
         month_value(month)
         lock(session, user)
-        item = session.scalar(
-            select(Savings).where(
-                Savings.household_id == user.household_id,
-                Savings.month == month,
-                Savings.name == payload.name,
-            )
-        )
-        if item is None:
-            item = Savings(household_id=user.household_id, month=month, name=payload.name)
-            session.add(item)
-        item.cents = payload.cents
+        set_savings(session, user, month, payload.name, payload.cents)
         audit(session, user, "savings.set", month)
         session.commit()
         return {"ok": True}
@@ -609,16 +630,14 @@ def create_app(url=None, *, testing=False):
     def edit_savings(month: str, ident: int, payload: SavingsIn, user=Depends(current), session=Depends(db)):
         month_value(month)
         lock(session, user)
-        item = owned(session, Savings, ident, user)
-        if item.month != month:
-            raise HTTPException(404, "Allocation not found")
-        duplicate = session.scalar(select(Savings.id).where(
-            Savings.household_id == user.household_id, Savings.month == month,
-            Savings.name == payload.name, Savings.id != ident,
-        ))
-        if duplicate:
-            raise HTTPException(409, "A goal with that name already exists this month")
-        item.name, item.cents = payload.name, payload.cents
+        item = active_savings(session, user, month, ident)
+        if item.name != payload.name:
+            duplicate = effective_savings(session, user, month).get(payload.name)
+            if duplicate and duplicate.cents > 0:
+                raise HTTPException(409, "A savings plan with that name already exists")
+            # Stop the old name from this month onward, preserving prior history.
+            set_savings(session, user, month, item.name, 0)
+        set_savings(session, user, month, payload.name, payload.cents)
         audit(session, user, "savings.edit", ident)
         session.commit()
         return {"ok": True}
@@ -627,10 +646,9 @@ def create_app(url=None, *, testing=False):
     def delete_savings(month: str, ident: int, user=Depends(current), session=Depends(db)):
         month_value(month)
         lock(session, user)
-        item = owned(session, Savings, ident, user)
-        if item.month != month:
-            raise HTTPException(404, "Allocation not found")
-        session.delete(item)
+        item = active_savings(session, user, month, ident)
+        # A zero override prevents an earlier recurring plan from reappearing.
+        set_savings(session, user, month, item.name, 0)
         audit(session, user, "savings.delete", ident)
         session.commit()
         return {"ok": True}
@@ -720,9 +738,10 @@ def create_app(url=None, *, testing=False):
             )
         ).all()
         plans = [
-            dict(id=s.id, name=s.name, cents=s.cents)
-            for s in scoped(session, Savings, user)
-            if s.month == month
+            dict(id=s.id, name=s.name, cents=s.cents,
+                 inherited_from=s.month if s.month != month else None)
+            for s in effective_savings(session, user, month).values()
+            if s.cents > 0
         ]
         return {
             "month": month,
