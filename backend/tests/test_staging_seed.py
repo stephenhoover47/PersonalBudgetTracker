@@ -52,3 +52,38 @@ def test_seed_provisions_two_users_and_never_resets_existing_data(tmp_path):
         ] == hashes
         assert len(session.scalars(select(Household)).all()) == 1
     engine.dispose()
+
+
+def test_seed_command_accepts_parsed_database_url(tmp_path, monkeypatch):
+    from household import staging_seed
+    from household.db import make_engine
+    from sqlalchemy.engine import make_url
+
+    url = make_url("sqlite:///" + str(tmp_path / "command.db"))
+    engine = make_engine(url)
+    Base.metadata.create_all(engine)
+    values = ["a distinct sample password one", "a distinct sample password two"]
+    monkeypatch.setattr(staging_seed, "validate_target", lambda: (url, values))
+    staging_seed.main()
+    with Session(engine) as session:
+        assert len(session.scalars(select(User)).all()) == 2
+    engine.dispose()
+
+
+def test_staging_prepare_runs_migration_then_seed(tmp_path, monkeypatch):
+    from household import staging_prepare, staging_seed
+    from household.db import make_engine
+    from sqlalchemy import inspect
+    from sqlalchemy.engine import make_url
+
+    url = make_url("sqlite:///" + str(tmp_path / "prepare.db"))
+    values = ["a distinct sample password one", "a distinct sample password two"]
+    monkeypatch.setenv("DATABASE_URL", url.render_as_string(hide_password=False))
+    monkeypatch.setattr(staging_seed, "validate_target", lambda: (url, values))
+    staging_prepare.main()
+    staging_prepare.main()
+    engine = make_engine(url)
+    assert "hh_alembic_version" in inspect(engine).get_table_names()
+    with Session(engine) as session:
+        assert len(session.scalars(select(User)).all()) == 2
+    engine.dispose()

@@ -70,10 +70,10 @@ jobs:
         env:
           POSTGRES_USER: budget
           POSTGRES_PASSWORD: test-only-password
-          POSTGRES_DB: budget_test
+          POSTGRES_DB: hearth_mvp_staging
         ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U budget -d budget_test"
+          --health-cmd "pg_isready -U budget -d hearth_mvp_staging"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
@@ -84,12 +84,15 @@ jobs:
       - name: Apply migrations from the built image
         run: >-
           docker run --rm --network host
-          -e DATABASE_URL=postgresql://budget:test-only-password@127.0.0.1:5432/budget_test
-          hearth-mvp:ci alembic -c household-alembic.ini upgrade head
+          -e DATABASE_URL=postgresql://budget:test-only-password@127.0.0.1:5432/hearth_mvp_staging
+          -e APP_TIER=staging -e STAGING_DB_HOST=127.0.0.1
+          -e STAGING_STEPHEN_PASSWORD=ci-only-sample-password-one
+          -e STAGING_CLAIRE_PASSWORD=ci-only-sample-password-two
+          hearth-mvp:ci python -m household.staging_prepare
       - name: Start the built application
         run: >-
           docker run -d --name hearth-ci --network host
-          -e DATABASE_URL=postgresql://budget:test-only-password@127.0.0.1:5432/budget_test
+          -e DATABASE_URL=postgresql://budget:test-only-password@127.0.0.1:5432/hearth_mvp_staging
           -e APP_ENV=production -e APP_ORIGIN=https://staging.example.test
           hearth-mvp:ci
       - name: Verify health, compiled frontend and authentication boundary
