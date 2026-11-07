@@ -127,6 +127,7 @@ for (const viewport of [
     await expect(updatedGoal.getByText("Repeating from 2026-11")).toBeVisible();
     await updatedGoal.getByLabel(`${holidayGoal} allocation`, { exact: true }).fill("350");
     await updatedGoal.getByRole("button", { name: "Save changes" }).click();
+    await expect(updatedGoal.getByLabel(`${holidayGoal} allocation`, { exact: true })).toHaveValue("350.00");
     await expect(page.getByRole("status").filter({hasText: "Savings plan saved"})).toBeInViewport();
     await page.getByRole("button", {name: "Dismiss confirmation"}).click();
     await page.getByLabel("Budget month", { exact: true }).fill("2027-01");

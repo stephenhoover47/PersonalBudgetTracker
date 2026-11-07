@@ -220,11 +220,13 @@ function App() {
     setTotal(result.total);
     setSelected([]);
   }
-  async function run(action: () => Promise<void>) {
+  async function run(action: () => Promise<void>, clearFeedback = true) {
     pending.current += 1;
     setBusy(true);
-    setError("");
-    setNotice("");
+    if (clearFeedback) {
+      setError("");
+      setNotice("");
+    }
     try {
       await action();
     } catch (e) {
@@ -244,13 +246,13 @@ function App() {
       .finally(() => setBoot(false));
   }, []);
   useEffect(() => {
-    if (me) void run(load);
+    if (me) void run(load, false);
   }, [me, month]);
   useEffect(() => {
     if (!me) return;
     let active = true;
     const timer = setTimeout(() => {
-      if (active) void run(loadTx);
+      if (active) void run(loadTx, false);
     }, 200);
     return () => {
       active = false;
@@ -378,6 +380,7 @@ function App() {
               value={month}
               onChange={(e) => {
                 if (e.target.value) {
+                  setNotice("");
                   setMonth(e.target.value);
                   setOffset(0);
                 }
