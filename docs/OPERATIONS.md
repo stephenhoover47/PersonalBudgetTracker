@@ -33,15 +33,21 @@ Import previews retain normalized financial rows. Uncommitted previews expire af
 
 ## Repository and staging status
 
-The feature branch is published as `feature/household-mvp` and PR #2 is open:
-https://github.com/stephenhoover47/PersonalBudgetTracker/pull/2
+The feature branch is `feature/household-mvp`; [PR #2](https://github.com/stephenhoover47/PersonalBudgetTracker/pull/2) contains the implementation. Functional commit `0b976d3c2a9bdc5715fc42bde531069e77c530d4` passed hosted SQLite/PostgreSQL tests, desktop/mobile browser workflows and the production Docker build/runtime checks.
 
-The initial hosted checks passed against SQLite and PostgreSQL 16, including migrations and desktop/mobile browser workflows. The follow-up staging-preparation commit adds a Docker build/runtime smoke check and one-time sample-user provisioning tests.
+### Live Sandbox — November 7, 2026
 
-An isolated Neon Free-plan project, `PersonalBudgetTracker MVP staging`, was created in US East with PostgreSQL 17 and fixed 0.25 CU compute. Its dedicated database is `hearth_mvp_staging`; existing Neon projects/databases were not read or modified. Connection credentials are staged as Railway variables and are never committed here.
+- URL: https://hearth-mvp-staging-sandbox.up.railway.app
+- Railway project: Personal Budget Tracker 0.0.1; environment: **Sandbox**; service: **Hearth MVP Staging**.
+- Deployment: `b4f8f8c2-0001-4d3a-a2fe-647b5320d1f1`, observed **SUCCESS**.
+- Source is pinned to the passing functional commit. Future branch pushes do not auto-deploy.
+- Neon: a separate Free-plan project, `PersonalBudgetTracker MVP staging`, with database `hearth_mvp_staging`, PostgreSQL 17 and fixed 0.25 CU compute. Existing financial databases were not queried or modified.
+- Both services remain on existing Free plans; no paid subscription was enabled. Free-tier quotas and cold starts may affect availability. Production services are unchanged.
 
-A new `Hearth MVP Staging` service is prepared in the existing Railway project's **Sandbox** environment. Creation, feature-branch source, root Dockerfile, health check, explicit migrations, production cookie settings and database variables are staged only. No Railway deployment has been started. The source is pinned to a reviewed feature-branch commit so unrelated pushes cannot deploy automatically.
+APP_ORIGIN is the explicit HTTPS URL above. The generated domain routes to **8080**, matching Railway's actual PORT. Do not infer that runtime port from Docker EXPOSE. Create the domain and set the correct origin before relying on startup: an unresolved domain reference intentionally fails the production-origin check.
 
-The staging pre-deploy command is `python -m household.staging_prepare`, which validates the isolated target before running migrations and the sample-account seed. The seed refuses any target except APP_TIER=staging, the explicitly allowlisted database hostname, database `hearth_mvp_staging`, and a staging/Sandbox deployment environment. It creates two sample logins (`stephen@example.test` and `claire@example.test`) only when no household exists. Two distinct generated passwords are supplied through protected environment variables, never source or logs. Subsequent deployments leave existing users/passwords and household data unchanged. This helper must never be used for production provisioning.
+The pre-deploy command is `python -m household.staging_prepare`. It validates the staging database/hostname/environment allowlist before applying the code-managed Alembic migration and provisioning two sample accounts. It accepts SQLAlchemy URL objects without masking the password. The image smoke test executes this full command against disposable PostgreSQL, rather than testing only the migration and seed separately.
 
-Before committing the staged Railway changes: verify only this new service is affected, confirm the hosting cost authorization, use the latest passing commit, and generate a Railway HTTPS domain. APP_ORIGIN references the generated public domain. Apply service resource limits after the staged service exists (the Railway API cannot apply limits to a service that exists only in a staged patch). Verify terminal deployment success, HTTPS/login behavior and sample CSV reconciliation before sharing it for testing. Production release and real-data migration remain separate approvals.
+Sample logins are `stephen@example.test` and `claire@example.test`. Distinct random credentials are held in Railway variables and supplied privately to the owner; never put them in source, logs, PRs or screenshots. The seed refuses non-staging targets and never resets existing users/passwords or adds sample data over an existing household. Production provisioning remains the separate administrative CLI.
+
+The Sandbox is for sample-data review. Before a production release, complete real-device Safari checks, review recovery/MFA requirements, approve the production configuration and costs, verify backups, and establish any real-data import mapping. Production release and real financial-data migration are separate approvals.

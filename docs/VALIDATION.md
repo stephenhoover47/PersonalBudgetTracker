@@ -4,7 +4,7 @@
 
 | Check | Result |
 | --- | --- |
-| Backend API, ingestion and operations tests | **31 passed**, Python 3.12, pytest 9.0.3 |
+| Backend API, ingestion and operations tests | **35 passed**, Python 3.12, pytest 9.0.3 |
 | Frontend unit tests | **2 passed**, Vitest 5.1.0 |
 | Desktop browser household workflow, 1440 × 1000 | **Passed** |
 | iPhone-sized browser household workflow, 390 × 844 | **Passed** |
@@ -32,3 +32,10 @@ The test client emits two upstream deprecation warnings for its httpx and AnyIO 
 ## Readiness
 
 This is an implemented and locally tested MVP, ready for repository review and staging verification. It is not a claim of production certification. Read OPERATIONS.md before deployment, especially CSV identity ambiguities, private two-user authentication/recovery, backup/restore, and the distinction between a spending budget and account cash balances.
+
+
+## Hosted staging follow-up
+
+Functional commit `0b976d3c2a9bdc5715fc42bde531069e77c530d4` passed [CI run 42405954648](https://github.com/stephenhoover47/PersonalBudgetTracker/actions/runs/42405954648): 35 API/operations tests against SQLite and PostgreSQL, migrations/drift checks, desktop/mobile browser tests, TypeScript/build/audit, and the complete Docker image runtime checks. The Docker job runs the guarded staging preparation command, including migrations and both sample users. Regression tests cover the parsed-URL provisioning bug found during hosted setup.
+
+The isolated Railway Sandbox deployment reached SUCCESS on November 7, 2026. Public HTTPS serves the app, manifest, service worker and install icons; health returns 200, unauthenticated access returns 401, and cross-origin login attempts return 403. No production services or real financial records were changed. See the PR for the latest hosted sample-login/import smoke-test results.
