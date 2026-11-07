@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { cents, dollars as money } from "./money";
 import "./style.css";
+import { displayMonth, displayDate, shiftMonth } from "./dates";
 
 type Category = { id: number; name: string; mode: string };
 type Account = { id: number; name: string; kind: string };
@@ -85,16 +86,6 @@ const currentMonth = () =>
     year: "numeric",
     month: "2-digit",
   }).format(new Date());
-function shiftMonth(month: string, step: number) {
-  const [y, m] = month.split("-").map(Number);
-  const date = new Date(Date.UTC(y, m - 1 + step, 1));
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-const monthOptions = Array.from({length: 101 * 12}, (_, i) => {
-  const year = 2000 + Math.floor(i / 12), month = i % 12;
-  return {value: `${year}-${String(month + 1).padStart(2, "0")}`,
-    label: new Intl.DateTimeFormat("en-US", {month: "long", year: "numeric", timeZone: "UTC"}).format(new Date(Date.UTC(year, month, 1)))};
-});
 let csrf = "";
 async function api<T>(
   path: string,
@@ -150,8 +141,9 @@ function App() {
     setPlanEditing(false); return true;
   }
   function changeMonth(value: string) {
-    if (value === month || !leavePlan()) return;
-    setNotice(""); setMonth(value); setOffset(0);
+    if (value === month) return true;
+    if (!leavePlan()) return false;
+    setNotice(""); setMonth(value); setOffset(0); return true;
   }
   const [me, setMe] = useState<Me | null>(null),
     [boot, setBoot] = useState(true),
@@ -394,7 +386,7 @@ function App() {
           </div>
           <div className="month-control">
             <button type="button" className="secondary" aria-label="Previous month" disabled={busy || planSaving || month === "2000-01"} onClick={() => changeMonth(shiftMonth(month, -1))}>‹</button>
-            <label className="month">Budget month<select aria-label="Budget month" value={month} disabled={busy || planSaving} onChange={e => changeMonth(e.target.value)}>{monthOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}</select></label>
+            <label className="month">Budget month<span className="month-field"><span className="month-display" aria-hidden="true">{displayMonth(month)}</span><input aria-label="Budget month" type="month" min="2000-01" max="2100-12" value={month} disabled={busy || planSaving} onChange={e => {if (/^\d{4}-\d{2}$/.test(e.target.value) && !changeMonth(e.target.value)) e.currentTarget.value = month;}} onBlur={e => {e.currentTarget.value = month;}} onClick={e => {try {e.currentTarget.showPicker?.();} catch { /* Native interaction remains available. */ }}} /></span></label>
             <button type="button" className="secondary" aria-label="Next month" disabled={busy || planSaving || month === "2100-12"} onClick={() => changeMonth(shiftMonth(month, 1))}>›</button>
           </div>
           <button
@@ -432,7 +424,7 @@ function App() {
               <div>
                 <span className="eyebrow">LEFT IN YOUR SPENDING BUDGET</span>
                 <h2>{money(dashboard.remaining_cents)}</h2>
-                <p>Your spending limit minus spending so far · {month}</p>
+                <p>Your spending limit minus spending so far · {displayMonth(month)}</p>
                 <p className="hero-explanation">This is a budget estimate, not your bank balance. Savings plans are separate.</p>
               </div>
               <div className="hero-note">
@@ -563,7 +555,7 @@ function App() {
           </>
         )}
         {tab === "Transactions" && (
-          <section className="panel">
+          <section className="panel activity-panel">
             <div className="section-title">
               <h2>Your shared activity</h2>
               <span className="muted">{total} transactions</span>
@@ -624,7 +616,7 @@ function App() {
                 ))}
               </select>
             </div>
-            <div className="filters">
+            <div className="transaction-tools">
               <label>Sort transactions
                 <select aria-label="Sort transactions" value={sort} onChange={e => { setSort(e.target.value); setOffset(0); }}>
                   <option value="newest">Date: newest first</option>
@@ -635,9 +627,9 @@ function App() {
               </label>
               <label className="check"><input type="checkbox" checked={creditsFirst}
                 onChange={e => { setCreditsFirst(e.target.checked); setOffset(0); }} />Refunds & reimbursements first</label>
-              <button className="quiet" onClick={() => { setSearch(""); setKind(""); setAccount(""); setCategory(""); setOffset(0); }}>Clear filters</button>
+              <button className="quiet" onClick={() => { setSearch(""); setKind(""); setAccount(""); setCategory(""); setSort("newest"); setCreditsFirst(false); setOffset(0); }}>Clear filters</button>
             </div>
-            {category && <p>Showing transactions containing {categories.find(c => String(c.id) === category)?.name}. Amounts show the full transaction; category splits appear beneath the merchant.</p>}
+            {category && <p className="filter-summary">Showing transactions containing {categories.find(c => String(c.id) === category)?.name}. Amounts show the full transaction; category splits appear beneath the merchant.</p>}
             {selected.length > 0 && (
               <div className="bulk">
                 <strong>{selected.length} selected</strong>
@@ -680,7 +672,7 @@ function App() {
                 </button>
               </div>
             )}
-            <div className="table-scroll">
+            <div className="table-scroll transaction-table">
               <table>
                 <thead>
                   <tr>
@@ -723,7 +715,7 @@ function App() {
                         />
                       </td>
                       <td>
-                        {t.date}
+                        {displayDate(t.date)}
                         <small>
                           {accounts.find((a) => a.id === t.account_id)?.name}
                         </small>
@@ -762,6 +754,19 @@ function App() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="transaction-cards">
+              {txs.length > 0 && <label className="check select-page"><input type="checkbox" aria-label="Select all mobile transactions" checked={selected.length === txs.length} onChange={e => setSelected(e.target.checked ? txs.map(t => t.id) : [])} />Select all on page</label>}
+              {txs.map(t => <article className="transaction-card" key={t.id} aria-label={`${t.merchant}, ${displayDate(t.date)}`}>
+                <div className="transaction-card-top">
+                  <input type="checkbox" aria-label={`Select ${t.merchant}`} checked={selected.includes(t.id)} onChange={e => setSelected(ids => e.target.checked ? [...ids, t.id] : ids.filter(id => id !== t.id))} />
+                  <div className="transaction-merchant"><strong>{t.merchant}</strong><small>{displayDate(t.date)}</small></div>
+                  <div className="transaction-amount"><strong>{money(t.cents)}</strong><small>{t.cents < 0 ? "Money in" : "Money out"}</small></div>
+                </div>
+                <small className="transaction-account">{accounts.find(a => a.id === t.account_id)?.name}</small>
+                {t.splits.length > 0 && <p className="transaction-splits">{t.splits.map(s => `${categories.find(c => c.id === s.category_id)?.name}: ${money(s.cents)}`).join(" · ")}</p>}
+                <div className="transaction-card-bottom"><span className={`badge ${t.kind === "review" ? "warning" : ""}`}>{labels[t.kind]}</span><button type="button" className="secondary" onClick={() => setEditing(t)}>Edit</button></div>
+              </article>)}
             </div>
             {!txs.length && (
               <div className="empty">
@@ -925,7 +930,7 @@ function App() {
                     <tbody>
                       {preview.rows.slice(0, 100).map((r, i) => (
                         <tr key={i}>
-                          <td>{r.date}</td>
+                          <td>{displayDate(r.date)}</td>
                           <td>{r.merchant}</td>
                           <td>{money(r.cents)}</td>
                           <td>
@@ -984,7 +989,7 @@ function App() {
                     #{h.id} ·{" "}
                     {accounts.find((a) => a.id === h.account_id)?.name}
                     <small>
-                      {new Date(h.created * 1000).toLocaleString()} · {h.status}
+                      {new Date(h.created * 1000).toLocaleString("en-US", {timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit"})} · {h.status}
                     </small>
                   </span>
                   <span>
@@ -1169,7 +1174,7 @@ function Plan({month, dashboard, busy, onSave, onEditingChange}: {
   month: string; dashboard: Dashboard; busy: boolean;
   onSave: (payload: PlanPayload) => Promise<void>;
 }) {
-  const [editing, setEditing] = useState(false), [saving, setSaving] = useState(false),
+  const [editing, updateEditing] = useState(false), [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const [budgets, setBudgets] = useState<{id: number; amount: string; rollover: boolean}[]>([]);
   const [goals, setGoals] = useState<{id?: number; name: string; amount: string}[]>([]);
@@ -1178,7 +1183,7 @@ function Plan({month, dashboard, busy, onSave, onEditingChange}: {
     setGoals(dashboard.savings.map(s => ({id: s.id, name: s.name, amount: (s.cents / 100).toFixed(2)})));
     setError(""); setEditing(true);
   }
-  useEffect(() => {onEditingChange(editing);}, [editing, onEditingChange]);
+  function setEditing(value: boolean) {updateEditing(value); onEditingChange(value);}
   // Protect a draft if the user changes month, tab, or refreshes the page.
   useEffect(() => {
     if (!editing) return;
@@ -1207,14 +1212,14 @@ function Plan({month, dashboard, busy, onSave, onEditingChange}: {
   }}>
     <section className="panel">
       <div className="section-title">
-        <div><h2>Your monthly plan</h2><p>Amounts repeat each month until you change them. Changes start in {month}.</p></div>
+        <div><h2>Your monthly plan</h2><p>Amounts repeat each month until you change them. Changes start in {displayMonth(month)}.</p></div>
         {!editing && <button type="button" disabled={busy} onClick={start}>Edit plan</button>}
       </div>
       <fieldset disabled={saving || busy}>
         {dashboard.categories.map(c => {
           const draft = budgets.find(b => b.id === c.id);
           return <div className="budget-row" key={c.id}>
-            <div><strong>{c.name}</strong><small>{money(c.spent_cents)} spent · {money(c.rollover_cents)} carried{c.inherited_from ? ` · Repeating from ${c.inherited_from}` : ""}</small></div>
+            <div><strong>{c.name}</strong><small>{money(c.spent_cents)} spent · {money(c.rollover_cents)} carried{c.inherited_from ? ` · Repeating from ${displayMonth(c.inherited_from)}` : ""}</small></div>
             {editing && draft ? <>
               <label>Budget ($)<input aria-label={`${c.name} budget`} inputMode="decimal" required value={draft.amount} onChange={e => setBudgets(bs => bs.map(b => b.id === c.id ? {...b, amount: e.target.value} : b))} /></label>
               <label className="check"><input aria-label={`${c.name} rollover`} type="checkbox" checked={draft.rollover} onChange={e => setBudgets(bs => bs.map(b => b.id === c.id ? {...b, rollover: e.target.checked} : b))} />Rollover</label>
@@ -1235,7 +1240,7 @@ function Plan({month, dashboard, busy, onSave, onEditingChange}: {
           </div>)}
           <button type="button" className="secondary" onClick={() => setGoals(gs => [...gs, {name: "", amount: ""}])}>Add savings goal</button>
         </> : <>
-          {dashboard.savings.map(s => <div className="goal" key={s.id}><span><strong>{s.name}</strong>{s.inherited_from && <small>Repeating from {s.inherited_from}</small>}</span><strong>{money(s.cents)} / month</strong></div>)}
+          {dashboard.savings.map(s => <div className="goal" key={s.id}><span><strong>{s.name}</strong>{s.inherited_from && <small>Repeating from {displayMonth(s.inherited_from)}</small>}</span><strong>{money(s.cents)} / month</strong></div>)}
           {!dashboard.savings.length && <p>No savings goals yet. Edit your plan to add one.</p>}
         </>}
       </fieldset>
@@ -1371,7 +1376,7 @@ function EditDialog({
         <strong>
           {tx.merchant} · {money(tx.cents)}
         </strong>
-        <p>{tx.date} · Positive is money out; negative is money in.</p>
+        <p>{displayDate(tx.date)} · Positive is money out; negative is money in.</p>
         <label>
           Classification
           <KindSelect value={kind} onChange={setKind} />

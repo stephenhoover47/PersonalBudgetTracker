@@ -356,7 +356,7 @@ header {
   flex-wrap: wrap;
   margin: 22px 0;
 }
-.filters input {
+.filters input:not([type="checkbox"]) {
   flex: 1;
   min-width: 160px;
 }
@@ -810,7 +810,7 @@ aside .wordmark { font-size: 1.4rem; letter-spacing: -0.8px; }
 
 .month-control { display: flex; align-items: end; gap: 6px; }
 .month-control button { padding: 10px 12px; font-size: 1.2rem; }
-.month-control select { min-width: 0; width: 155px; }
+.month-control input { min-width: 0; width: 185px; }
 .plan fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .plan .budget-row { grid-template-columns: minmax(0, 1fr) 120px auto; }
 .plan-amount { text-align: right; }
@@ -822,3 +822,95 @@ aside .wordmark { font-size: 1.4rem; letter-spacing: -0.8px; }
  .plan-actions { bottom: 82px; }
  .month-control { max-width: 100%; }
 }
+
+/* Responsive layout: content, controls and safe areas share the same width. */
+.shell { grid-template-columns: 225px minmax(0, 1fr); }
+header > div, .panel, .plan, .goal > span, .budget-row > div { min-width: 0; }
+.month-control { flex: 0 1 auto; }
+.month-control .month { max-width: none; min-width: 0; }
+.month-control button { flex: 0 0 44px; padding: 8px; }
+.goal > span, .budget-row strong { overflow-wrap: anywhere; }
+.goal > strong { flex-shrink: 0; }
+.plan .section-title { align-items: flex-start; }
+.plan .section-title > div { min-width: 0; }
+.plan .section-title p { margin: 8px 0 0; }
+.plan .section-title > button { flex-shrink: 0; }
+.transaction-cards { display: none; }
+.filters { display: grid; grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(120px, 1fr)); gap: 12px; }
+.filters input:not([type="checkbox"]), .filters select { width: 100%; min-width: 0; }
+.transaction-tools { display: flex; align-items: end; flex-wrap: wrap; gap: 12px 20px; margin: 0 0 24px; }
+.transaction-tools > label:first-child { min-width: 210px; }
+.transaction-tools .check { align-self: center; gap: 10px; }
+.transaction-tools input[type="checkbox"] { flex: 0 0 19px; margin: 0; }
+.transaction-tools > button { margin-left: auto; }
+.filter-summary { font-size: .85rem; padding: 12px; background: #f4f6ef; border-radius: 8px; }
+@media (min-width: 701px) and (max-width: 1100px) {
+ .shell { grid-template-columns: 180px minmax(0, 1fr); }
+ .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+ header { flex-wrap: wrap; }
+}
+@media (max-width: 700px) {
+ .shell { display: block; }
+ main { padding: 22px max(16px, env(safe-area-inset-right)) calc(110px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+ header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 12px; align-items: start; }
+ header > div { min-width: 0; }
+ header > div:first-child { grid-column: 1; grid-row: 1; }
+ header > .mobile-logout { grid-column: 2; grid-row: 1; margin: 0; padding: 6px 0 6px 10px; }
+ header > .month-control { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 10px; align-items: end; width: 100%; }
+ .month-control .month { width: 100%; font-size: .75rem; }
+ .month-control input { width: 100%; max-width: 100%; min-width: 0; font-size: 16px; height: 46px; padding: 10px 12px; margin: 0; }
+ .month-control button { height: 46px; width: 44px; }
+ .eyebrow { margin-bottom: 8px; }
+ .hero { padding: 24px 20px; }
+ .hero p { font-size: .85rem; }
+ .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+ .stat { min-width: 0; padding: 16px 12px; }
+ .stat span { font-size: .75rem; min-height: 32px; }
+ .stat small { font-size: .75rem; margin-top: 8px; }
+ .panel { padding: 20px 16px; }
+ .activity-panel .section-title { gap: 10px; }
+ .activity-panel .section-title h2 { font-size: 1.1rem; }
+ .activity-panel .section-title .muted { font-size: .75rem; }
+ .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 18px 0 14px; }
+ .filters > input { grid-column: 1 / -1; }
+ .filters > select:last-child { grid-column: 1 / -1; }
+ .filters select, .filters input:not([type="checkbox"]) { font-size: 16px; min-height: 46px; }
+ .transaction-tools { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 20px; }
+ .transaction-tools > label:first-child { min-width: 0; }
+ .transaction-tools select { width: 100%; min-width: 0; font-size: 16px; }
+ .transaction-tools .check { gap: 10px; font-size: .85rem; }
+ .transaction-tools > button { margin-left: 0; justify-self: start; }
+ .transaction-table { display: none; }
+ .transaction-cards { display: block; }
+ .select-page { margin: 0 0 14px; font-size: .8rem; }
+ .transaction-card { padding: 18px 0; border-top: 1px solid #e1e7de; }
+ .transaction-card-top { display: grid; grid-template-columns: 19px minmax(0, 1fr) auto; gap: 10px; align-items: start; }
+ .transaction-card input[type="checkbox"] { margin: 2px 0 0; }
+ .transaction-merchant { min-width: 0; overflow-wrap: anywhere; line-height: 1.45; }
+ .transaction-amount { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+ .transaction-merchant strong, .transaction-amount strong { font-size: .95rem; }
+ .transaction-account { margin: 10px 0 0 29px; overflow-wrap: anywhere; }
+ .transaction-splits { font-size: .8rem; margin: 8px 0 0 29px; overflow-wrap: anywhere; }
+ .transaction-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0 0 29px; }
+ .transaction-card-bottom .badge { white-space: normal; overflow-wrap: anywhere; }
+ .transaction-card-bottom button { flex-shrink: 0; min-width: 64px; }
+ .plan .section-title { flex-wrap: nowrap; }
+ .plan .section-title h2 { font-size: 1.1rem; }
+ .plan .section-title p { font-size: .8rem; }
+ .plan .section-title button { padding: 10px 12px; }
+ .plan-actions { bottom: calc(80px + env(safe-area-inset-bottom)); }
+ .plan-actions > div > button { flex: 1; }
+ .goal { gap: 10px; }
+ .goal strong { white-space: normal; }
+ footer { gap: 12px; flex-wrap: wrap; }
+ .bulk > select { min-width: 0; width: 100%; }
+}
+
+/* Keep the familiar native picker while rendering one consistent date label. */
+.month-field { position: relative; display: block; }
+.month-control .month-field input { width: 100%; color: transparent; caret-color: transparent; }
+.month-field input::-webkit-datetime-edit { opacity: 0; }
+.month-field input::-webkit-calendar-picker-indicator { opacity: 0; }
+.month-display { position: absolute; inset: 0; display: flex; align-items: center; padding: 10px 12px; color: #243c35; font-size: 16px; pointer-events: none; z-index: 1; }
+.month-display::after { content: "▾"; margin-left: auto; padding-left: 12px; font-size: 12px; }
+.month-field:has(input:disabled) .month-display { opacity: .5; }

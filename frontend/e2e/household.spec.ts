@@ -19,7 +19,7 @@ for (const viewport of [
     await expect(
       page.getByRole("heading", { name: "A clear view, Stephen." }),
     ).toBeVisible();
-    await page.getByLabel("Budget month", { exact: true }).selectOption("2026-11");
+    await page.getByLabel("Budget month", { exact: true }).fill("2026-11");
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByLabel("Account name").fill("Joint card " + viewport.name);
     await page
@@ -64,12 +64,28 @@ for (const viewport of [
       .getByRole("textbox", { name: "Search merchants" })
       .fill("Test Market");
     await expect(
-      page.getByRole("row").filter({ hasText: "Test Market" }),
+      (viewport.name === "iphone" ? page.getByRole("article") : page.getByRole("row")).filter({ hasText: "Test Market" }),
     ).toHaveCount(viewport.name === "desktop" ? 1 : 2);
-    const row = page
-      .getByRole("row")
-      .filter({ hasText: "Test Market" })
-      .first();
+    const visibleActivity = viewport.name === "iphone" ? page.locator(".transaction-cards") : page.locator(".transaction-table");
+    await expect(visibleActivity).toContainText("Nov 1, 2026");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+    await page.screenshot({path: `test-results/${viewport.name}-transactions.png`, fullPage: true});
+    if (viewport.name === "iphone") {
+      for (const width of [320, 375, 430, 768]) {
+        await page.setViewportSize({width, height: 844});
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+        const controlsFit = await page.locator(".month-control").evaluate(el => {
+          const bounds = el.getBoundingClientRect();
+          return bounds.left >= 0 && bounds.right <= window.innerWidth;
+        });
+        expect(controlsFit).toBeTruthy();
+      }
+      await page.setViewportSize(viewport);
+    }
+
+    const row = viewport.name === "iphone"
+      ? page.getByRole("article").filter({hasText: "Test Market"}).first()
+      : page.getByRole("row").filter({hasText: "Test Market"}).first();
     await row.getByRole("button", { name: "Edit", exact: true }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
@@ -105,10 +121,10 @@ for (const viewport of [
     await page.getByRole("button", {name: "Edit plan", exact: true}).click();
     await expect(page.getByLabel("Groceries budget", {exact: true})).toHaveValue("500.00");
     await page.getByRole("button", {name: "Cancel", exact: true}).click();
-    await page.getByLabel("Budget month", {exact: true}).selectOption("2026-12");
+    await page.getByLabel("Budget month", {exact: true}).fill("2026-12");
     await expect(page.getByText(travelGoal, {exact: true})).toBeVisible();
     await page.getByRole("button", {name: "Edit plan", exact: true}).click();
-    const goal = page.getByRole("group").filter({has: page.getByRole("textbox", {name: /Goal \d+ name/}).filter({visible: true})}).filter({has: page.locator(`input[value="${travelGoal}"]`)});
+    const goal = page.getByRole("group", {name: /^Savings goal/}).filter({has: page.getByRole("textbox", {name: /Goal \d+ name/}).filter({visible: true})}).filter({has: page.locator(`input[value="${travelGoal}"]`)});
     await goal.getByRole("textbox", {name: /allocation/}).fill("50");
     await page.getByRole("button", {name: "Save changes", exact: true}).click();
     await expect(page.getByRole("button", {name: "Edit plan", exact: true})).toBeVisible();
