@@ -272,7 +272,7 @@ function App() {
   if (!me)
     return (
       <main className="login">
-        <div className="wordmark">◒ hearth</div>
+        <div className="wordmark">◒ PocketWatcher</div>
         <div className="login-card">
           <span className="eyebrow">A LITTLE CLARITY, TOGETHER</span>
           <h1>
@@ -328,7 +328,7 @@ function App() {
     <div className="shell">
       <aside>
         <a className="wordmark" href="/">
-          ◒ hearth
+          ◒ PocketWatcher
         </a>
         <span className="household">{me.household}</span>
         <nav>
@@ -1184,7 +1184,7 @@ function App() {
           </>
         )}
         <footer>
-          Hearth · Shared spending, considered together.{" "}
+          PocketWatcher · Shared spending, considered together.{" "}
           <button
             className="quiet"
             disabled={busy}

@@ -10,6 +10,7 @@ for (const viewport of [
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("/");
+    await expect(page).toHaveTitle("PocketWatcher · Household budget");
     await page.getByLabel("Email", { exact: true }).fill("one@example.com");
     await page
       .getByLabel("Password", { exact: true })
@@ -154,6 +155,8 @@ for (const viewport of [
     expect(manifestResponse.ok()).toBeTruthy();
     const manifest = await manifestResponse.json();
     expect(manifest.display).toBe("standalone");
+    expect(manifest.name).toBe("PocketWatcher");
+    expect(manifest.short_name).toBe("PocketWatcher");
     expect(manifest.start_url).toBe("/");
     for (const icon of manifest.icons) {
       expect((await page.request.get(icon.src)).ok()).toBeTruthy();

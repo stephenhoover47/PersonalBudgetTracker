@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Hearth Household Budget",
-  "short_name": "Hearth",
+  "name": "PocketWatcher",
+  "short_name": "PocketWatcher",
   "description": "Your shared spending and plans, together.",
   "start_url": "/",
   "scope": "/",
