@@ -6,6 +6,7 @@ import secrets
 import time
 from datetime import date, datetime
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from argon2 import PasswordHasher
@@ -13,7 +14,7 @@ from argon2.exceptions import InvalidHashError, VerificationError
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import String, delete, func, select, text, update
+from sqlalchemy import String, case, delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
@@ -358,6 +359,8 @@ def create_app(url=None, *, testing=False):
         kind: str | None = None,
         account_id: int | None = None,
         category_id: int | None = None,
+        sort: Literal["newest", "oldest", "largest", "smallest"] = "newest",
+        credits_first: bool = False,
         offset: int = Query(0, ge=0),
         limit: int = Query(100, ge=1, le=200),
         user=Depends(current),
@@ -382,8 +385,14 @@ def create_app(url=None, *, testing=False):
                 )
             )
         total = session.scalar(select(func.count()).select_from(query.subquery()))
+        # Sort in SQL before pagination. Only spending credits belong in refunds-first.
+        ordering = {
+            "newest": Transaction.date.desc(), "oldest": Transaction.date.asc(),
+            "largest": Transaction.cents.desc(), "smallest": Transaction.cents.asc(),
+        }
+        priority = [case((Transaction.kind.in_(["refund", "reimbursement"]), 0), else_=1)] if credits_first else []
         items = session.scalars(
-            query.order_by(Transaction.date.desc(), Transaction.id.desc())
+            query.order_by(*priority, ordering[sort], Transaction.date.desc(), Transaction.id.desc())
             .offset(offset)
             .limit(limit)
         ).all()
@@ -596,6 +605,36 @@ def create_app(url=None, *, testing=False):
         session.commit()
         return {"ok": True}
 
+    @app.put("/api/savings/{month}/{ident}")
+    def edit_savings(month: str, ident: int, payload: SavingsIn, user=Depends(current), session=Depends(db)):
+        month_value(month)
+        lock(session, user)
+        item = owned(session, Savings, ident, user)
+        if item.month != month:
+            raise HTTPException(404, "Allocation not found")
+        duplicate = session.scalar(select(Savings.id).where(
+            Savings.household_id == user.household_id, Savings.month == month,
+            Savings.name == payload.name, Savings.id != ident,
+        ))
+        if duplicate:
+            raise HTTPException(409, "A goal with that name already exists this month")
+        item.name, item.cents = payload.name, payload.cents
+        audit(session, user, "savings.edit", ident)
+        session.commit()
+        return {"ok": True}
+
+    @app.delete("/api/savings/{month}/{ident}")
+    def delete_savings(month: str, ident: int, user=Depends(current), session=Depends(db)):
+        month_value(month)
+        lock(session, user)
+        item = owned(session, Savings, ident, user)
+        if item.month != month:
+            raise HTTPException(404, "Allocation not found")
+        session.delete(item)
+        audit(session, user, "savings.delete", ident)
+        session.commit()
+        return {"ok": True}
+
     @app.get("/api/dashboard")
     def dashboard(month: str, user=Depends(current), session=Depends(db)):
         month_value(month)
@@ -637,19 +676,23 @@ def create_app(url=None, *, testing=False):
                 .group_by(func.substr(Transaction.date.cast(String), 1, 7), Split.category_id)
             )
         }
-        carry, last, budget_rows = {}, {}, {}
-        for b in history:
-            incoming = (
-                carry.get(b.category_id, 0)
-                if last.get(b.category_id) == previous(b.month) and b.rollover
-                else 0
-            )
-            if b.month == month:
-                budget_rows[b.category_id] = (b, incoming)
-            carry[b.category_id] = (
-                b.cents + incoming - all_spend.get((b.month, b.category_id), 0) if b.rollover else 0
-            )
-            last[b.category_id] = b.month
+        # Effective plans inherit per category without writing during a GET.
+        # Walk every month so rollover includes months nobody opened the app.
+        carry, effective, budget_rows = {}, {}, {}
+        cursor = history[0].month if history else month
+        while cursor <= month:
+            for b in history:
+                if b.month == cursor:
+                    effective[b.category_id] = b
+            for category_id, b in effective.items():
+                incoming = carry.get(category_id, 0) if b.rollover else 0
+                if cursor == month:
+                    budget_rows[category_id] = (b, incoming)
+                carry[category_id] = (
+                    b.cents + incoming - all_spend.get((cursor, category_id), 0)
+                    if b.rollover else 0
+                )
+            cursor = next_month(cursor).isoformat()[:7]
         result = []
         for c in scoped(session, Category, user):
             b, roll = budget_rows.get(c.id, (None, 0))
@@ -664,6 +707,7 @@ def create_app(url=None, *, testing=False):
                     rollover_cents=roll,
                     rollover=bool(b and b.rollover),
                     configured=bool(b),
+                    inherited_from=b.month if b and b.month != month else None,
                     spent_cents=actual,
                     remaining_cents=amount + roll - actual,
                 )
@@ -676,7 +720,7 @@ def create_app(url=None, *, testing=False):
             )
         ).all()
         plans = [
-            dict(name=s.name, cents=s.cents)
+            dict(id=s.id, name=s.name, cents=s.cents)
             for s in scoped(session, Savings, user)
             if s.month == month
         ]

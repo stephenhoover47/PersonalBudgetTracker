@@ -152,7 +152,7 @@ def test_splits_bulk_atomicity_concurrency(env):
         assert db.scalar(select(Audit.id))
 
 
-def test_rollover_gaps_and_savings(env):
+def test_rollover_inheritance_and_savings(env):
     c, _ = env
     for month in ["2026-09", "2026-10", "2026-11"]:
         assert (
@@ -173,7 +173,7 @@ def test_rollover_gaps_and_savings(env):
     assert c.post("/api/budgets/2026-12/copy", json={"source": "2026-11"}).status_code == 200
     assert c.post("/api/budgets/2026-12/copy", json={"source": "2026-11"}).status_code == 409
     c.put("/api/budgets/2027-02/1", json={"cents": 10000, "rollover": True})
-    assert c.get("/api/dashboard?month=2027-02").json()["categories"][0]["rollover_cents"] == 0
+    assert c.get("/api/dashboard?month=2027-02").json()["categories"][0]["rollover_cents"] == 33500
 
 
 def test_filters_validation(env):
@@ -201,3 +201,65 @@ def test_members_and_throttle(env):
     for _ in range(20):
         r = c.post("/api/auth/login", json={"email": "bad@example.com", "password": "bad"})
     assert r.status_code == 429
+
+
+def test_recurring_budgets_override_zero_and_read_only(env):
+    c, app = env
+    c.put('/api/budgets/2026-09/1', json={'cents': 10000, 'rollover': True})
+    c.put('/api/budgets/2026-11/2', json={'cents': 5000, 'rollover': False})
+    d = c.get('/api/dashboard?month=2026-12').json()
+    assert d['categories'][0]['budget_cents'] == 10000
+    assert d['categories'][0]['rollover_cents'] == 30000
+    assert d['categories'][0]['inherited_from'] == '2026-09'
+    assert d['categories'][1]['budget_cents'] == 5000
+    c.put('/api/budgets/2026-11/1', json={'cents': 0, 'rollover': False})
+    d = c.get('/api/dashboard?month=2026-12').json()
+    assert d['categories'][0]['budget_cents'] == 0
+    assert d['categories'][0]['rollover_cents'] == 0
+    assert c.get('/api/dashboard?month=2026-08').json()['budget_cents'] == 0
+    from household.models import Budget
+    with app.state.factory() as db:
+        assert len(db.scalars(select(Budget)).all()) == 3  # GET never materializes plans
+
+
+def test_savings_edit_delete_scope_and_conflicts(env):
+    c, app = env
+    c.put('/api/savings/2026-11', json={'name': 'Travel', 'cents': 20000})
+    c.put('/api/savings/2026-11', json={'name': 'House', 'cents': 10000})
+    goal = c.get('/api/dashboard?month=2026-11').json()['savings'][0]
+    path = f"/api/savings/2026-11/{goal['id']}"
+    assert c.put(path, json={'name': 'House', 'cents': 100}).status_code == 409
+    assert c.put(path, json={'name': 'Holiday', 'cents': 30000}).status_code == 200
+    d = c.get('/api/dashboard?month=2026-11').json()
+    assert d['planned_savings_cents'] == 40000 and d['spent_cents'] == 0
+    assert c.delete(path.replace('2026-11', '2026-12')).status_code == 404
+    from household.models import Savings
+    with app.state.factory() as db:
+        other = Savings(household_id=2, name='Private', month='2026-11', cents=100)
+        db.add(other)
+        db.commit()
+        private_id = other.id
+    private = f'/api/savings/2026-11/{private_id}'
+    assert c.put(private, json={'name': 'Stolen', 'cents': 0}).status_code == 404
+    assert c.delete(private).status_code == 404
+    assert c.delete(path).status_code == 200
+    assert c.delete(path).status_code == 404
+    assert c.get('/api/dashboard?month=2026-11').json()['planned_savings_cents'] == 10000
+
+
+def test_transaction_sorting_before_pagination(env):
+    c, _ = env
+    imported(c, 'date,merchant,amount\n2026-11-01,Big,100\n2026-11-03,Small,10\n2026-11-02,Return,-20\n')
+    for tx in items(c):
+        classify(c, tx, kind='refund' if tx['cents'] < 0 else 'expense')
+    def names(**params):
+        r = c.get('/api/transactions', params={'month': '2026-11', 'category_id': 1, **params})
+        assert r.status_code == 200
+        return [t['merchant'] for t in r.json()['items']]
+    assert names() == ['Small', 'Return', 'Big']
+    assert names(sort='oldest') == ['Big', 'Return', 'Small']
+    assert names(sort='largest') == ['Big', 'Small', 'Return']
+    assert names(sort='smallest') == ['Return', 'Small', 'Big']
+    assert names(sort='largest', credits_first=True, limit=1) == ['Return']
+    assert names(search='Big', credits_first=True) == ['Big']
+    assert c.get('/api/transactions?month=2026-11&sort=invalid').status_code == 422

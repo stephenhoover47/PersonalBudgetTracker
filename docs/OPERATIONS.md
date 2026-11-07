@@ -51,3 +51,14 @@ The pre-deploy command is `python -m household.staging_prepare`. It validates th
 Sample logins are `stephen@example.test` and `claire@example.test`. Distinct random credentials are held in Railway variables and supplied privately to the owner; never put them in source, logs, PRs or screenshots. The seed refuses non-staging targets and never resets existing users/passwords or adds sample data over an existing household. Production provisioning remains the separate administrative CLI.
 
 The Sandbox is for sample-data review. Before a production release, complete real-device Safari checks, review recovery/MFA requirements, approve the production configuration and costs, verify backups, and establish any real-data import mapping. Production release and real financial-data migration are separate approvals.
+
+
+### Usability follow-up
+
+Category rows open the selected month’s transactions, clearing stale filters. Sorting is performed before pagination: newest/oldest date or highest/lowest signed transaction amount, with optional refunds/reimbursements first. Split transactions show their full amount; category allocations remain visible in the editor.
+
+Category budgets now repeat from the latest explicitly saved plan at or before the selected month. An explicit zero disables a recurring amount; turning rollover off resets carried balances. Overrides apply forward until a later explicit plan replaces them. Rollover walks intervening months even if nobody visited them, carrying both positive and negative balances. Historical changes recalculate subsequent inherited plans. Dashboard reads never create budget rows. The legacy copy endpoint remains for explicit snapshots; routine use requires no copying.
+
+Savings allocations have visible amount/name editing and deletion (with confirmation). They remain month-specific plans, separate from spending and actual bank balances. Deletion is scoped to the signed-in household and selected month. This release adds no migrations and does not reset existing sandbox data.
+
+For travel, record purchases on their posted date and fund a dedicated rollover category before booking. Savings earmarks are planning aids, not proof that cash is funded. Planned travel versus routine spending, trip tagging, and goal balances are future enhancements; do not redate or hide real purchases to smooth a monthly chart.

@@ -21,9 +21,11 @@ type BudgetCategory = Category & {
   rollover_cents: number;
   rollover: boolean;
   configured: boolean;
+  inherited_from: string | null;
   spent_cents: number;
   remaining_cents: number;
 };
+type Saving = { id: number; name: string; cents: number };
 type Dashboard = {
   spent_cents: number;
   budget_cents: number;
@@ -33,7 +35,7 @@ type Dashboard = {
   contribution_cents: number;
   planned_savings_cents: number;
   categories: BudgetCategory[];
-  savings: { name: string; cents: number }[];
+  savings: Saving[];
 };
 type Me = { name: string; household: string; members: string[]; csrf: string };
 type Preview = {
@@ -147,6 +149,8 @@ function App() {
     [kind, setKind] = useState(""),
     [account, setAccount] = useState(""),
     [category, setCategory] = useState(""),
+    [sort, setSort] = useState("newest"),
+    [creditsFirst, setCreditsFirst] = useState(false),
     [selected, setSelected] = useState<number[]>([]),
     [editing, setEditing] = useState<Tx | null>(null);
   const [bulkKind, setBulkKind] = useState("expense"),
@@ -165,6 +169,8 @@ function App() {
     kind,
     account,
     category,
+    sort,
+    creditsFirst,
     offset,
   ]);
   const activeScope = useRef(scope);
@@ -196,6 +202,8 @@ function App() {
       search,
       offset: String(offset),
       limit: "50",
+      sort,
+      credits_first: String(creditsFirst),
     });
     if (kind) p.set("kind", kind);
     if (account) p.set("account_id", account);
@@ -248,7 +256,7 @@ function App() {
       active = false;
       clearTimeout(timer);
     };
-  }, [me, month, search, kind, account, category, offset]);
+  }, [me, month, search, kind, account, category, sort, creditsFirst, offset]);
   async function refresh() {
     await load();
     await loadTx();
@@ -436,6 +444,10 @@ function App() {
               <button
                 className="review-banner"
                 onClick={() => {
+                  setSearch("");
+                  setCategory("");
+                  setAccount("");
+                  setOffset(0);
                   setKind("review");
                   setTab("Transactions");
                 }}
@@ -444,6 +456,18 @@ function App() {
                 incomplete until classified. <span>Review →</span>
               </button>
             )}
+            <section className="panel attention" aria-label="Budget check-in">
+              <h2>Your quick check-in</h2>
+              <p>{dashboard.review_count > 0
+                ? `${dashboard.review_count} transactions need review before these totals are complete.`
+                : "All imported transactions are reviewed."}</p>
+              <p>{dashboard.categories.filter(c => c.configured && c.remaining_cents < 0).length
+                ? `${dashboard.categories.filter(c => c.configured && c.remaining_cents < 0).length} categories over budget. Tap a category below to see why.`
+                : "No configured categories are over budget."}</p>
+              {dashboard.categories.some(c => !c.configured && c.spent_cents !== 0) &&
+                <p>Some spending has no category budget. Set a plan to include it in your comparison.</p>}
+              <small>Remaining budget is a spending-plan comparison, not your bank balance or cash available.</small>
+            </section>
             <div className="columns">
               <section className="panel">
                 <div className="section-title">
@@ -456,7 +480,13 @@ function App() {
                   <p>Add categories in Settings to begin.</p>
                 )}
                 {dashboard.categories.map((c) => (
-                  <div className="category-row" key={c.id}>
+                  <button className="category-row category-link" key={c.id}
+                    aria-label={`View ${c.name} transactions`}
+                    onClick={() => {
+                      setCategory(String(c.id)); setSearch(""); setKind("");
+                      setAccount(""); setOffset(0); setSort("newest");
+                      setCreditsFirst(false); setTab("Transactions");
+                    }}>
                     <div>
                       <strong>{c.name}</strong>
                       <small>
@@ -478,7 +508,7 @@ function App() {
                         }}
                       />
                     </div>
-                  </div>
+                  </button>
                 ))}
               </section>
               <section className="panel">
@@ -576,6 +606,20 @@ function App() {
                 ))}
               </select>
             </div>
+            <div className="filters">
+              <label>Sort transactions
+                <select aria-label="Sort transactions" value={sort} onChange={e => { setSort(e.target.value); setOffset(0); }}>
+                  <option value="newest">Date: newest first</option>
+                  <option value="oldest">Date: oldest first</option>
+                  <option value="largest">Amount: highest first</option>
+                  <option value="smallest">Amount: lowest first</option>
+                </select>
+              </label>
+              <label className="check"><input type="checkbox" checked={creditsFirst}
+                onChange={e => { setCreditsFirst(e.target.checked); setOffset(0); }} />Refunds & reimbursements first</label>
+              <button className="quiet" onClick={() => { setSearch(""); setKind(""); setAccount(""); setCategory(""); setOffset(0); }}>Clear filters</button>
+            </div>
+            {category && <p>Showing transactions containing {categories.find(c => String(c.id) === category)?.name}. Amounts show the full transaction; category splits appear beneath the merchant.</p>}
             {selected.length > 0 && (
               <div className="bulk">
                 <strong>{selected.length} selected</strong>
@@ -941,27 +985,11 @@ function App() {
                 <div>
                   <h2>A plan for {month}</h2>
                   <p>
-                    Set each category for this month. Rollover carries both
-                    underspending and overspending through consecutive
-                    configured months.
+                    Budgets automatically repeat from the latest earlier plan for each category.
+                    Saving a change applies to this month and later months until another saved plan overrides it.
+                    Rollover carries unused amounts or overspending; turn it off to reset the balance.
                   </p>
                 </div>
-                <button
-                  className="secondary"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const d = new Date(month + "-01T12:00:00");
-                      d.setMonth(d.getMonth() - 1);
-                      const source = d.toISOString().slice(0, 7);
-                      await api(`/budgets/${month}/copy`, "POST", { source });
-                      await load();
-                      setNotice("Previous month’s budgets copied.");
-                    })
-                  }
-                >
-                  Copy previous month
-                </button>
               </div>
               {dashboard.categories.map((c) => (
                 <BudgetRow
@@ -987,11 +1015,17 @@ function App() {
                 These earmarks sit separately from your spending budget. They do
                 not reduce “remaining budget” and never move money.
               </p>
+              <p>Savings allocations apply only to the selected month.</p>
               {dashboard.savings.map((s) => (
-                <div className="goal" key={s.name}>
-                  <span>{s.name}</span>
-                  <strong>{money(s.cents)}</strong>
-                </div>
+                <SavingsRow key={`${month}-${s.id}-${s.name}-${s.cents}`} saving={s} busy={busy}
+                  onSave={(name, amount) => void run(async () => {
+                    await api(`/savings/${month}/${s.id}`, "PUT", {name, cents: amount});
+                    await load(); setNotice("Savings allocation updated.");
+                  })}
+                  onDelete={() => { if (window.confirm(`Delete ${s.name} for ${month}?`)) void run(async () => {
+                    await api(`/savings/${month}/${s.id}`, "DELETE");
+                    await load(); setNotice("Savings allocation deleted.");
+                  }); }} />
               ))}
               <form
                 className="inline-form"
@@ -1005,7 +1039,7 @@ function App() {
                     });
                     await load();
                     setNotice(
-                      "Allocation saved. Use the same name to update it, or set $0 to clear.",
+                      "Allocation saved. Edit or delete it above.",
                     );
                   });
                 }}
@@ -1214,6 +1248,7 @@ function BudgetRow({
       <div>
         <strong>{c.name}</strong>
         <small>
+          {c.inherited_from ? `Repeating from ${c.inherited_from} · ` : ""}
           {c.mode} · {money(c.spent_cents)} spent · {money(c.rollover_cents)}{" "}
           carried
         </small>
@@ -1241,6 +1276,22 @@ function BudgetRow({
       {error && <span role="alert">{error}</span>}
     </form>
   );
+}
+function SavingsRow({ saving, busy, onSave, onDelete }: {
+  saving: Saving; busy: boolean; onSave: (name: string, amount: number) => void; onDelete: () => void;
+}) {
+  const [name, setName] = useState(saving.name), [amount, setAmount] = useState((saving.cents / 100).toFixed(2)), [error, setError] = useState("");
+  return <form className="inline-form" aria-label={`Edit ${saving.name}`} onSubmit={e => {
+    e.preventDefault();
+    try { const value = cents(amount); if (value < 0) throw Error("Allocation must be nonnegative"); setError(""); onSave(name, value); }
+    catch (err) { setError((err as Error).message); }
+  }}>
+    <label>Goal name<input aria-label={`${saving.name} name`} value={name} required maxLength={100} onChange={e => setName(e.target.value)} /></label>
+    <label>Monthly allocation ($)<input aria-label={`${saving.name} allocation`} inputMode="decimal" value={amount} required onChange={e => setAmount(e.target.value)} /></label>
+    <button disabled={busy} className="secondary">Save changes</button>
+    <button type="button" disabled={busy} className="quiet" onClick={onDelete}>Delete</button>
+    {error && <span role="alert">{error}</span>}
+  </form>;
 }
 function CategoryRow({
   category,

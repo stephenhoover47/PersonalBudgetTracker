@@ -109,6 +109,26 @@ for (const viewport of [
         () => document.documentElement.scrollWidth <= window.innerWidth,
       ),
     ).toBeTruthy();
+    await page.getByRole("button", { name: "View Groceries transactions", exact: true }).click();
+    await expect(page.getByLabel("Filter by category")).toHaveValue("1");
+    await page.getByLabel("Sort transactions").selectOption("largest");
+    await page.getByLabel("Refunds & reimbursements first").check();
+    await page.getByRole("button", { name: "Plan", exact: true }).click();
+    const goalEditor = page.getByRole("form", { name: "Edit Travel", exact: true });
+    await goalEditor.getByLabel("Travel name", { exact: true }).fill("Holiday");
+    await goalEditor.getByLabel("Travel allocation", { exact: true }).fill("300");
+    await goalEditor.getByRole("button", { name: "Save changes" }).click();
+    const updatedGoal = page.getByRole("form", { name: "Edit Holiday", exact: true });
+    await expect(updatedGoal).toBeVisible();
+    await expect(updatedGoal.getByLabel("Holiday allocation", { exact: true })).toHaveValue("300.00");
+    page.once("dialog", dialog => dialog.accept());
+    await updatedGoal.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(updatedGoal).not.toBeVisible();
+    await page.getByLabel("Budget month", { exact: true }).fill("2026-12");
+    await expect(page.getByLabel("Groceries budget", { exact: true })).toHaveValue("500.00");
+    await expect(page.getByText("Repeating from 2026-11", { exact: false })).toBeVisible();
+    await page.getByLabel("Budget month", { exact: true }).fill("2026-11");
+    await page.getByRole("button", { name: "Overview", exact: true }).click();
     await page.screenshot({
       path: `test-results/${viewport.name}-overview.png`,
       fullPage: true,

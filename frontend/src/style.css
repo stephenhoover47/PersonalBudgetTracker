@@ -785,3 +785,11 @@ select {
     );
   }
 }
+
+.category-link { width: 100%; background: transparent; color: inherit; text-align: left; border-radius: 0; cursor: pointer; }
+.category-link:hover, .category-link:focus-visible { background: #e9eee5; }
+.category-link .track { grid-column: 1 / -1; }
+.attention { margin: 20px 0; }
+.attention p { margin: 8px 0; }
+
+.panel > .category-link { margin-top: 0; }
