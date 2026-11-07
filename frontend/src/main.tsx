@@ -85,6 +85,16 @@ const currentMonth = () =>
     year: "numeric",
     month: "2-digit",
   }).format(new Date());
+function shiftMonth(month: string, step: number) {
+  const [y, m] = month.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1 + step, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+const monthOptions = Array.from({length: 101 * 12}, (_, i) => {
+  const year = 2000 + Math.floor(i / 12), month = i % 12;
+  return {value: `${year}-${String(month + 1).padStart(2, "0")}`,
+    label: new Intl.DateTimeFormat("en-US", {month: "long", year: "numeric", timeZone: "UTC"}).format(new Date(Date.UTC(year, month, 1)))};
+});
 let csrf = "";
 async function api<T>(
   path: string,
@@ -132,6 +142,17 @@ function KindSelect({
   );
 }
 function App() {
+  const [planEditing, setPlanEditing] = useState(false);
+  const [planSaving, setPlanSaving] = useState(false);
+  function leavePlan() {
+    if (planSaving) return false;
+    if (planEditing && !window.confirm("Discard unsaved plan changes?")) return false;
+    setPlanEditing(false); return true;
+  }
+  function changeMonth(value: string) {
+    if (value === month || !leavePlan()) return;
+    setNotice(""); setMonth(value); setOffset(0);
+  }
   const [me, setMe] = useState<Me | null>(null),
     [boot, setBoot] = useState(true),
     [error, setError] = useState(""),
@@ -338,6 +359,7 @@ function App() {
                 key={t}
                 className={tab === t ? "active" : ""}
                 onClick={() => {
+                  if (t !== tab && !leavePlan()) return;
                   setTab(t);
                   setNotice("");
                 }}
@@ -370,23 +392,11 @@ function App() {
             <span className="eyebrow">YOUR SHARED FINANCES</span>
             <h1>{tab === "Overview" ? `A clear view, ${me.name}.` : tab}</h1>
           </div>
-          <label className="month">
-            Budget month
-            <input
-              aria-label="Budget month"
-              type="month"
-              min="2000-01"
-              max="2100-12"
-              value={month}
-              onChange={(e) => {
-                if (e.target.value) {
-                  setNotice("");
-                  setMonth(e.target.value);
-                  setOffset(0);
-                }
-              }}
-            />
-          </label>
+          <div className="month-control">
+            <button type="button" className="secondary" aria-label="Previous month" disabled={busy || planSaving || month === "2000-01"} onClick={() => changeMonth(shiftMonth(month, -1))}>‹</button>
+            <label className="month">Budget month<select aria-label="Budget month" value={month} disabled={busy || planSaving} onChange={e => changeMonth(e.target.value)}>{monthOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}</select></label>
+            <button type="button" className="secondary" aria-label="Next month" disabled={busy || planSaving || month === "2100-12"} onClick={() => changeMonth(shiftMonth(month, 1))}>›</button>
+          </div>
           <button
             className="mobile-logout quiet"
             onClick={() =>
@@ -987,93 +997,15 @@ function App() {
           </>
         )}
         {tab === "Plan" && dashboard && (
-          <>
-            <section className="panel">
-              <div className="section-title">
-                <div>
-                  <h2>A plan for {month}</h2>
-                  <p>
-                    Budgets automatically repeat from the latest earlier plan for each category.
-                    Saving a change applies to this month and later months until another saved plan overrides it.
-                    Rollover carries unused amounts or overspending; turn it off to reset the balance.
-                  </p>
-                </div>
-              </div>
-              {dashboard.categories.map((c) => (
-                <BudgetRow
-                  key={`${month}-${c.id}-${c.budget_cents}-${c.rollover}`}
-                  category={c}
-                  busy={busy}
-                  onSave={(amount, rollover) =>
-                    void run(async () => {
-                      await api(`/budgets/${month}/${c.id}`, "PUT", {
-                        cents: amount,
-                        rollover,
-                      });
-                      await load();
-                      setNotice("Monthly budget saved.");
-                    })
-                  }
-                />
-              ))}
-            </section>
-            <section className="panel">
-              <h2>Monthly savings plans</h2>
-              <p>
-                These earmarks sit separately from your spending budget. They do
-                not reduce “remaining budget” and never move money.
-              </p>
-              <p>Plans repeat every month automatically. Changes apply from the selected month until a later saved override. Deleting stops the plan from that month; earlier history stays intact.</p>
-              {dashboard.savings.map((s) => (
-                <SavingsRow key={`${month}-${s.id}-${s.name}-${s.cents}`} saving={s} busy={busy}
-                  onSave={(name, amount) => void run(async () => {
-                    await api(`/savings/${month}/${s.id}`, "PUT", {name, cents: amount});
-                    await load(); setNotice("Savings plan saved. It will repeat in following months.");
-                  })}
-                  onDelete={() => { if (window.confirm(`Stop ${s.name} from ${month} onward? Earlier months stay unchanged; a later saved override can restart it.`)) void run(async () => {
-                    await api(`/savings/${month}/${s.id}`, "DELETE");
-                    await load(); setNotice("Savings plan stopped from this month onward.");
-                  }); }} />
-              ))}
-              <form
-                className="inline-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const f = new FormData(e.currentTarget);
-                  void run(async () => {
-                    await api(`/savings/${month}`, "PUT", {
-                      name: f.get("name"),
-                      cents: cents(String(f.get("amount"))),
-                    });
-                    await load();
-                    setNotice(
-                      "Allocation saved. This monthly target repeats automatically.",
-                    );
-                  });
-                }}
-              >
-                <label>
-                  Goal name
-                  <input
-                    name="name"
-                    placeholder="Emergency fund"
-                    required
-                    maxLength={100}
-                  />
-                </label>
-                <label>
-                  Monthly allocation ($)
-                  <input
-                    name="amount"
-                    inputMode="decimal"
-                    required
-                    placeholder="250.00"
-                  />
-                </label>
-                <button disabled={busy}>Save allocation</button>
-              </form>
-            </section>
-          </>
+          <Plan key={month} onEditingChange={setPlanEditing} month={month} dashboard={dashboard} busy={busy}
+            onSave={async (payload) => {
+              setPlanSaving(true);
+              try {
+                await api(`/plan/${month}`, "PUT", payload);
+                await load();
+                setNotice("Plan saved. Changes repeat in following months.");
+              } finally {setPlanSaving(false);}
+            }} />
         )}
         {tab === "Settings" && (
           <>
@@ -1227,79 +1159,92 @@ function Stat({ label, value, description }: { label: string; value: string; des
     </div>
   );
 }
-function BudgetRow({
-  category: c,
-  busy,
-  onSave,
-}: {
-  category: BudgetCategory;
-  busy: boolean;
-  onSave: (n: number, r: boolean) => void;
+type PlanPayload = {
+  budgets: {category_id: number; cents: number; rollover: boolean}[];
+  savings: {id?: number; name: string; cents: number}[];
+  removed_savings: number[];
+};
+function Plan({month, dashboard, busy, onSave, onEditingChange}: {
+  onEditingChange: (editing: boolean) => void;
+  month: string; dashboard: Dashboard; busy: boolean;
+  onSave: (payload: PlanPayload) => Promise<void>;
 }) {
-  const [amount, setAmount] = useState((c.budget_cents / 100).toFixed(2)),
-    [roll, setRoll] = useState(c.rollover),
+  const [editing, setEditing] = useState(false), [saving, setSaving] = useState(false),
     [error, setError] = useState("");
-  return (
-    <form
-      className="budget-row"
-      onSubmit={(e) => {
-        e.preventDefault();
-        try {
-          const n = cents(amount);
-          if (n < 0) throw Error("Budget must be nonnegative");
-          setError("");
-          onSave(n, roll);
-        } catch (e) {
-          setError((e as Error).message);
-        }
-      }}
-    >
-      <div>
-        <strong>{c.name}</strong>
-        <small>
-          {c.inherited_from ? `Repeating from ${c.inherited_from} · ` : ""}
-          {c.mode} · {money(c.spent_cents)} spent · {money(c.rollover_cents)}{" "}
-          carried
-        </small>
-      </div>
-      <label>
-        Budget ($)
-        <input
-          aria-label={`${c.name} budget`}
-          inputMode="decimal"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-      </label>
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={roll}
-          onChange={(e) => setRoll(e.target.checked)}
-        />
-        Rollover
-      </label>
-      <button className="secondary" disabled={busy}>
-        Save
-      </button>
-      {error && <span role="alert">{error}</span>}
-    </form>
-  );
-}
-function SavingsRow({ saving, busy, onSave, onDelete }: {
-  saving: Saving; busy: boolean; onSave: (name: string, amount: number) => void; onDelete: () => void;
-}) {
-  const [name, setName] = useState(saving.name), [amount, setAmount] = useState((saving.cents / 100).toFixed(2)), [error, setError] = useState("");
-  return <form className="inline-form" aria-label={`Edit ${saving.name}`} onSubmit={e => {
-    e.preventDefault();
-    try { const value = cents(amount); if (value < 0) throw Error("Allocation must be nonnegative"); setError(""); onSave(name, value); }
-    catch (err) { setError((err as Error).message); }
+  const [budgets, setBudgets] = useState<{id: number; amount: string; rollover: boolean}[]>([]);
+  const [goals, setGoals] = useState<{id?: number; name: string; amount: string}[]>([]);
+  function start() {
+    setBudgets(dashboard.categories.map(c => ({id: c.id, amount: (c.budget_cents / 100).toFixed(2), rollover: c.rollover})));
+    setGoals(dashboard.savings.map(s => ({id: s.id, name: s.name, amount: (s.cents / 100).toFixed(2)})));
+    setError(""); setEditing(true);
+  }
+  useEffect(() => {onEditingChange(editing);}, [editing, onEditingChange]);
+  // Protect a draft if the user changes month, tab, or refreshes the page.
+  useEffect(() => {
+    if (!editing) return;
+    const handler = (e: BeforeUnloadEvent) => {e.preventDefault(); e.returnValue = "";};
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [editing]);
+  return <form className="plan" onSubmit={async e => {
+    e.preventDefault(); if (saving) return; setError("");
+    try {
+      const parsedBudgets = budgets.map(b => ({category_id: b.id, cents: cents(b.amount), rollover: b.rollover}));
+      const parsedGoals = goals.map(g => ({...(g.id ? {id: g.id} : {}), name: g.name.trim(), cents: cents(g.amount)}));
+      if (parsedBudgets.some(b => b.cents < 0) || parsedGoals.some(g => !g.name || g.cents <= 0))
+        throw Error("Use nonnegative budgets and a name and positive amount for each savings plan.");
+      const names = parsedGoals.map(g => g.name);
+      if (new Set(names).size !== names.length) throw Error("Give each savings plan a different name.");
+      setSaving(true);
+      await onSave({
+        budgets: parsedBudgets.filter(b => {const c = dashboard.categories.find(c => c.id === b.category_id)!; return b.cents !== c.budget_cents || b.rollover !== c.rollover;}),
+        savings: parsedGoals.filter(g => {const old = dashboard.savings.find(s => s.id === g.id); return !old || old.name !== g.name || old.cents !== g.cents;}),
+        removed_savings: dashboard.savings.filter(s => !goals.some(g => g.id === s.id)).map(s => s.id),
+      });
+      setEditing(false);
+    } catch (err) { setError((err as Error).message); }
+    finally {setSaving(false);}
   }}>
-    <label>Goal name{saving.inherited_from && <small>Repeating from {saving.inherited_from}</small>}<input aria-label={`${saving.name} name`} value={name} required maxLength={100} onChange={e => setName(e.target.value)} /></label>
-    <label>Monthly allocation ($)<input aria-label={`${saving.name} allocation`} inputMode="decimal" value={amount} required onChange={e => setAmount(e.target.value)} /></label>
-    <button disabled={busy} className="secondary">{busy ? "Saving…" : "Save changes"}</button>
-    <button type="button" disabled={busy} className="quiet" onClick={onDelete}>Delete</button>
-    {error && <span role="alert">{error}</span>}
+    <section className="panel">
+      <div className="section-title">
+        <div><h2>Your monthly plan</h2><p>Amounts repeat each month until you change them. Changes start in {month}.</p></div>
+        {!editing && <button type="button" disabled={busy} onClick={start}>Edit plan</button>}
+      </div>
+      <fieldset disabled={saving || busy}>
+        {dashboard.categories.map(c => {
+          const draft = budgets.find(b => b.id === c.id);
+          return <div className="budget-row" key={c.id}>
+            <div><strong>{c.name}</strong><small>{money(c.spent_cents)} spent · {money(c.rollover_cents)} carried{c.inherited_from ? ` · Repeating from ${c.inherited_from}` : ""}</small></div>
+            {editing && draft ? <>
+              <label>Budget ($)<input aria-label={`${c.name} budget`} inputMode="decimal" required value={draft.amount} onChange={e => setBudgets(bs => bs.map(b => b.id === c.id ? {...b, amount: e.target.value} : b))} /></label>
+              <label className="check"><input aria-label={`${c.name} rollover`} type="checkbox" checked={draft.rollover} onChange={e => setBudgets(bs => bs.map(b => b.id === c.id ? {...b, rollover: e.target.checked} : b))} />Rollover</label>
+            </> : <div className="plan-amount"><strong>{money(c.budget_cents)}</strong><small>{c.rollover ? "Rollover on" : "Rollover off"}</small></div>}
+          </div>;
+        })}
+      </fieldset>
+    </section>
+    <section className="panel">
+      <h2>Monthly savings plans</h2>
+      <p>Your monthly savings targets. These do not move money or track bank bucket balances.</p>
+      <fieldset disabled={saving || busy}>
+        {editing ? <>
+          {goals.map((g, i) => <div className="inline-form" role="group" aria-label={`Savings goal ${i + 1}`} key={g.id ?? `new-${i}`}>
+            <label>Goal name<input aria-label={`Goal ${i + 1} name`} required maxLength={100} value={g.name} onChange={e => setGoals(gs => gs.map((v,j) => j === i ? {...v, name: e.target.value} : v))} /></label>
+            <label>Monthly allocation ($)<input aria-label={`Goal ${i + 1} allocation`} required inputMode="decimal" value={g.amount} onChange={e => setGoals(gs => gs.map((v,j) => j === i ? {...v, amount: e.target.value} : v))} /></label>
+            <button type="button" className="quiet" onClick={() => setGoals(gs => gs.filter((_,j) => j !== i))}>Remove goal {i + 1}</button>
+          </div>)}
+          <button type="button" className="secondary" onClick={() => setGoals(gs => [...gs, {name: "", amount: ""}])}>Add savings goal</button>
+        </> : <>
+          {dashboard.savings.map(s => <div className="goal" key={s.id}><span><strong>{s.name}</strong>{s.inherited_from && <small>Repeating from {s.inherited_from}</small>}</span><strong>{money(s.cents)} / month</strong></div>)}
+          {!dashboard.savings.length && <p>No savings goals yet. Edit your plan to add one.</p>}
+        </>}
+      </fieldset>
+    </section>
+    {editing && <div className="plan-actions">
+      {error && <p role="alert">{error}</p>}
+      <p>Saving applies to this month onward. Removing a goal stops it from this month.</p>
+      <div><button disabled={saving || busy}>{saving ? "Saving…" : "Save changes"}</button><button type="button" className="secondary" disabled={saving} onClick={() => {setEditing(false); setError("");}}>Cancel</button></div>
+    </div>}
   </form>;
 }
 function CategoryRow({

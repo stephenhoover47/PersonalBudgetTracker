@@ -44,6 +44,7 @@ from .schemas import (
     Edit,
     ImportIn,
     Login,
+    PlanIn,
     SavingsIn,
 )
 
@@ -650,6 +651,41 @@ def create_app(url=None, *, testing=False):
         # A zero override prevents an earlier recurring plan from reappearing.
         set_savings(session, user, month, item.name, 0)
         audit(session, user, "savings.delete", ident)
+        session.commit()
+        return {"ok": True}
+
+    @app.put("/api/plan/{month}")
+    def save_plan(month: str, payload: PlanIn, user=Depends(current), session=Depends(db)):
+        month_value(month)
+        lock(session, user)
+        # Validate the whole edit before committing any part of the plan.
+        category_ids = [b.category_id for b in payload.budgets]
+        saving_ids = [s.id for s in payload.savings if s.id is not None]
+        removed = payload.removed_savings
+        if (len(set(category_ids)) != len(category_ids)
+                or len(set(saving_ids + removed)) != len(saving_ids + removed)):
+            raise HTTPException(422, "Duplicate plan entries")
+        rows = {ident: active_savings(session, user, month, ident)
+                for ident in saving_ids + removed}
+        untouched = {name for name, row in effective_savings(session, user, month).items()
+                     if row.cents > 0 and row.id not in rows}
+        names = [s.name for s in payload.savings]
+        if len(set(names)) != len(names) or untouched.intersection(names):
+            raise HTTPException(409, "A savings plan with that name already exists")
+        for b in payload.budgets:
+            owned(session, Category, b.category_id, user)
+            item = session.scalar(select(Budget).where(
+                Budget.household_id == user.household_id,
+                Budget.category_id == b.category_id, Budget.month == month))
+            if item is None:
+                item = Budget(household_id=user.household_id, category_id=b.category_id, month=month)
+                session.add(item)
+            item.cents, item.rollover = b.cents, b.rollover
+        for row in rows.values():
+            set_savings(session, user, month, row.name, 0)
+        for saving in payload.savings:
+            set_savings(session, user, month, saving.name, saving.cents)
+        audit(session, user, "plan.save", month)
         session.commit()
         return {"ok": True}
 

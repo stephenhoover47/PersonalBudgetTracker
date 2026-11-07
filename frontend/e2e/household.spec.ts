@@ -19,7 +19,7 @@ for (const viewport of [
     await expect(
       page.getByRole("heading", { name: "A clear view, Stephen." }),
     ).toBeVisible();
-    await page.getByLabel("Budget month", { exact: true }).fill("2026-11");
+    await page.getByLabel("Budget month", { exact: true }).selectOption("2026-11");
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByLabel("Account name").fill("Joint card " + viewport.name);
     await page
@@ -87,64 +87,45 @@ for (const viewport of [
       .click();
     await expect(dialog).not.toBeVisible();
     await page.getByRole("button", { name: "Plan", exact: true }).click();
-    await page.getByLabel("Groceries budget", { exact: true }).fill("500.00");
-    await page
-      .locator(".budget-row")
-      .filter({ hasText: "Groceries" })
-      .getByRole("button", { name: "Save", exact: true })
-      .click();
-    await expect(
-      page.getByRole("status").filter({ hasText: "Monthly budget saved." }),
-    ).toBeVisible();
-    await page.getByLabel("Goal name", { exact: true }).fill(travelGoal);
-    await page
-      .getByLabel("Monthly allocation ($)", { exact: true })
-      .fill("250");
-    await page.getByRole("button", { name: "Save allocation" }).click();
-    await expect(
-      page.getByRole("status").filter({ hasText: "Allocation saved." }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Overview", exact: true }).click();
-    await expect(page.getByText(travelGoal, { exact: true })).toBeVisible();
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= window.innerWidth,
-      ),
-    ).toBeTruthy();
-    await page.getByRole("button", { name: "View Groceries transactions", exact: true }).click();
-    await expect(page.getByLabel("Filter by category")).toHaveValue("1");
-    await page.getByLabel("Sort transactions").selectOption("largest");
-    await page.getByLabel("Refunds & reimbursements first").check();
-    await page.getByRole("button", { name: "Plan", exact: true }).click();
-    const goalEditor = page.getByRole("form", { name: `Edit ${travelGoal}`, exact: true });
-    await goalEditor.getByLabel(`${travelGoal} name`, { exact: true }).fill(holidayGoal);
-    await goalEditor.getByLabel(`${travelGoal} allocation`, { exact: true }).fill("300");
-    await goalEditor.getByRole("button", { name: "Save changes" }).click();
-    const updatedGoal = page.getByRole("form", { name: `Edit ${holidayGoal}`, exact: true });
-    await expect(updatedGoal).toBeVisible();
-    await expect(updatedGoal.getByLabel(`${holidayGoal} allocation`, { exact: true })).toHaveValue("300.00");
-    await page.getByLabel("Budget month", { exact: true }).fill("2026-12");
-    await expect(updatedGoal.getByLabel(`${holidayGoal} allocation`, { exact: true })).toHaveValue("300.00");
-    await expect(updatedGoal.getByText("Repeating from 2026-11")).toBeVisible();
-    await updatedGoal.getByLabel(`${holidayGoal} allocation`, { exact: true }).fill("350");
-    await updatedGoal.getByRole("button", { name: "Save changes" }).click();
-    await expect(updatedGoal.getByLabel(`${holidayGoal} allocation`, { exact: true })).toHaveValue("350.00");
-    await expect(page.getByRole("status").filter({hasText: "Savings plan saved"})).toBeInViewport();
-    await page.getByRole("button", {name: "Dismiss confirmation"}).click();
-    await page.getByLabel("Budget month", { exact: true }).fill("2027-01");
-    await expect(updatedGoal.getByLabel(`${holidayGoal} allocation`, { exact: true })).toHaveValue("350.00");
-    await page.getByLabel("Budget month", { exact: true }).fill("2026-12");
-    page.once("dialog", dialog => dialog.accept());
-    await updatedGoal.getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(updatedGoal).not.toBeVisible();
-    await page.getByLabel("Budget month", { exact: true }).fill("2026-12");
-    await expect(page.getByLabel("Groceries budget", { exact: true })).toHaveValue("500.00");
-    await expect(page.getByText("Repeating from 2026-11", { exact: false })).toBeVisible();
-    await page.getByLabel("Budget month", { exact: true }).fill("2026-11");
-    await expect(updatedGoal.getByLabel(`${holidayGoal} allocation`, { exact: true })).toHaveValue("300.00");
-    page.once("dialog", dialog => dialog.accept());
-    await updatedGoal.getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(updatedGoal).not.toBeVisible();
+    await expect(page.getByLabel("Groceries budget", {exact: true})).toHaveCount(0);
+    await expect(page.getByRole("button", {name: "Save changes", exact: true})).toHaveCount(0);
+    await page.getByRole("button", {name: "Edit plan", exact: true}).click();
+    await page.getByLabel("Groceries budget", {exact: true}).fill("500.00");
+    await page.getByRole("button", {name: "Add savings goal", exact: true}).click();
+    const newGoal = page.getByRole("group").filter({has: page.getByRole("textbox", {name: /Goal \d+ name/})}).last();
+    await newGoal.getByRole("textbox", {name: /name/}).fill(travelGoal);
+    await newGoal.getByRole("textbox", {name: /allocation/}).fill("250");
+    await page.getByRole("button", {name: "Save changes", exact: true}).click();
+    await expect(page.getByRole("status").filter({hasText: "Plan saved"})).toBeVisible();
+    await expect(page.getByText(travelGoal, {exact: true})).toBeVisible();
+    await expect(page.getByLabel("Groceries budget", {exact: true})).toHaveCount(0);
+    await page.getByRole("button", {name: "Edit plan", exact: true}).click();
+    await page.getByLabel("Groceries budget", {exact: true}).fill("900");
+    await page.getByRole("button", {name: "Cancel", exact: true}).click();
+    await page.getByRole("button", {name: "Edit plan", exact: true}).click();
+    await expect(page.getByLabel("Groceries budget", {exact: true})).toHaveValue("500.00");
+    await page.getByRole("button", {name: "Cancel", exact: true}).click();
+    await page.getByLabel("Budget month", {exact: true}).selectOption("2026-12");
+    await expect(page.getByText(travelGoal, {exact: true})).toBeVisible();
+    await page.getByRole("button", {name: "Edit plan", exact: true}).click();
+    const goal = page.getByRole("group").filter({has: page.getByRole("textbox", {name: /Goal \d+ name/}).filter({visible: true})}).filter({has: page.locator(`input[value="${travelGoal}"]`)});
+    await goal.getByRole("textbox", {name: /allocation/}).fill("50");
+    await page.getByRole("button", {name: "Save changes", exact: true}).click();
+    await expect(page.getByRole("button", {name: "Edit plan", exact: true})).toBeVisible();
+    await page.getByRole("button", {name: "Next month", exact: true}).click();
+    await expect(page.getByLabel("Budget month", {exact: true})).toHaveValue("2027-01");
+    await expect(page.locator(".goal").filter({hasText: travelGoal})).toContainText("$50.00");
+    await page.getByRole("button", {name: "Previous month", exact: true}).click();
+    await expect(page.getByLabel("Budget month", {exact: true})).toHaveValue("2026-12");
+    await page.getByRole("button", {name: "Edit plan", exact: true}).click();
+    await page.getByLabel("Groceries budget", {exact: true}).fill("700");
+    page.once("dialog", d => d.dismiss());
+    await page.getByRole("button", {name: "Next month", exact: true}).click();
+    await expect(page.getByLabel("Budget month", {exact: true})).toHaveValue("2026-12");
+    await expect(page.getByLabel("Groceries budget", {exact: true})).toHaveValue("700");
+    await page.getByRole("button", {name: "Cancel", exact: true}).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+    await page.screenshot({path: `test-results/${viewport.name}-plan.png`, fullPage: true});
     await page.getByRole("button", { name: "Overview", exact: true }).click();
     await expect(page.getByText("Monthly savings target", {exact: true})).toBeVisible();
     await page.screenshot({

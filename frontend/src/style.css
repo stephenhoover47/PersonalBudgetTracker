@@ -807,3 +807,18 @@ select {
 @media (max-width: 700px) { .save-confirmation { bottom: calc(84px + env(safe-area-inset-bottom)); } }
 
 aside .wordmark { font-size: 1.4rem; letter-spacing: -0.8px; }
+
+.month-control { display: flex; align-items: end; gap: 6px; }
+.month-control button { padding: 10px 12px; font-size: 1.2rem; }
+.month-control select { min-width: 0; width: 155px; }
+.plan fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.plan .budget-row { grid-template-columns: minmax(0, 1fr) 120px auto; }
+.plan-amount { text-align: right; }
+.plan-actions { position: sticky; bottom: 12px; background: #fff; padding: 16px; border: 1px solid #cdd7cb; border-radius: 12px; z-index: 5; box-shadow: 0 4px 20px #183e3620; }
+.plan-actions p { margin: 0 0 10px; font-size: .8rem; }
+.plan-actions > div { display: flex; gap: 12px; }
+@media(max-width: 700px) {
+ .plan .budget-row { grid-template-columns: minmax(0, 1fr) 110px; }
+ .plan-actions { bottom: 82px; }
+ .month-control { max-width: 100%; }
+}

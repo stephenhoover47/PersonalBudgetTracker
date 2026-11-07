@@ -1,6 +1,7 @@
 from conftest import classify, imported, items
-from household.models import Audit, Session
 from sqlalchemy import select
+
+from household.models import Audit, Session
 
 CSV = "date,merchant,amount,external_id\n2026-11-01,Market,100.25,a\n2026-11-02,Card payment,-100.25,b\n2026-11-03,Refund,-20.00,c\n"
 
@@ -306,3 +307,28 @@ def test_inherited_savings_rename_preserves_past_and_rejects_conflicts(env):
     assert {g['name'] for g in goals('2027-02')} == {'Holiday', 'House'}
     d = c.get('/api/dashboard?month=2027-02').json()
     assert d['planned_savings_cents'] == 40000 and d['spent_cents'] == 0
+
+
+def test_plan_save_atomic_and_recurring(env):
+    c, _ = env
+    payload = {"budgets": [{"category_id": 1, "cents": 50000, "rollover": False}],
+               "savings": [{"name": "Travel", "cents": 25000}]}
+    assert c.put("/api/plan/2026-11", json=payload).status_code == 200
+    d = c.get("/api/dashboard?month=2026-12").json()
+    travel = d["savings"][0]
+    assert travel["cents"] == 25000
+    assert c.put("/api/plan/2026-12", json={"savings": [
+        {"id": travel["id"], "name": "Travel", "cents": 5000}]}).status_code == 200
+    jan = c.get("/api/dashboard?month=2027-01").json()
+    assert jan["savings"][0]["cents"] == 5000
+    # Invalid ownership after a valid update must roll back the whole transaction.
+    bad = {"budgets": [{"category_id": 1, "cents": 99900}, {"category_id": 3, "cents": 12300}]}
+    assert c.put("/api/plan/2026-12", json=bad).status_code == 404
+    after = c.get("/api/dashboard?month=2026-12").json()
+    assert after["budget_cents"] == 50000
+    assert c.put("/api/plan/2026-12", json={"savings": [
+        {"name": "Travel", "cents": 1000}]}).status_code == 409
+    assert c.get("/api/dashboard?month=2026-12").json()["savings"][0]["cents"] == 5000
+    assert c.put("/api/plan/2026-12", json={"removed_savings": [after["savings"][0]["id"]]}).status_code == 200
+    assert c.get("/api/dashboard?month=2027-01").json()["savings"] == []
+    assert c.get("/api/dashboard?month=2026-11").json()["savings"][0]["cents"] == 25000

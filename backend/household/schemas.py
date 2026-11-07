@@ -64,6 +64,20 @@ class SavingsIn(Strict):
     cents: int = Field(strict=True, ge=0, le=1000000000)
 
 
+class PlanBudget(BudgetIn):
+    category_id: int = Field(gt=0)
+
+
+class PlanSaving(SavingsIn):
+    id: int | None = Field(default=None, gt=0)
+
+
+class PlanIn(Strict):
+    budgets: list[PlanBudget] = Field(default_factory=list, max_length=200)
+    savings: list[PlanSaving] = Field(default_factory=list, max_length=200)
+    removed_savings: list[int] = Field(default_factory=list, max_length=200)
+
+
 class ImportIn(Strict):
     account_id: int
     csv: str = Field(max_length=2000000)
