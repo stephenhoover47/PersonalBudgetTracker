@@ -24,8 +24,8 @@ The test client emits two upstream deprecation warnings for its httpx and AnyIO 
 
 ## Not executed here
 
-- Live PostgreSQL tests: no usable local PostgreSQL service was available. GitHub Actions is configured to run the full API suite against a disposable PostgreSQL 16 database after migration, with isolated per-test schemas. These checks have **not** run remotely because repository write access was denied.
-- Docker image build/run: no Docker daemon was available. Root and backend Dockerfiles were reviewed, but runtime/image verification remains a staging gate.
+- **Hosted PostgreSQL verification now passed:** PR #2 run 42403258259 completed the full original 31-test suite on PostgreSQL 16, migration upgrade/drift checks, SQLite tests and desktop/mobile browser workflows. See https://github.com/stephenhoover47/PersonalBudgetTracker/actions/runs/42403258259. New staging/bootstrap and Docker checks are added in the follow-up commit; inspect its latest run for their outcome.
+- Docker image build/run: no local Docker daemon was available. The follow-up CI job builds the root image, verifies its nonroot user, applies PostgreSQL migrations from the image and checks the running API/frontend/authentication boundary. Its latest CI outcome is the authoritative status.
 - Actual iPhone/Safari testing: mobile verification used Chromium at iPhone dimensions. Safari compatibility and touch behavior require a real-device/staging pass.
 - Production deployment, real bank credentials, paid APIs, live financial data or legacy-data migration: none performed.
 

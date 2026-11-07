@@ -1,5 +1,12 @@
 name: Household MVP checks
-on: [push, pull_request]
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: household-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -54,3 +61,47 @@ jobs:
         with:
           name: browser-test-results
           path: frontend/test-results
+
+  docker:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: budget
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: budget_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U budget -d budget_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the complete application image
+        run: docker build -t hearth-mvp:ci .
+      - name: Verify image runs as an unprivileged user
+        run: test "$(docker run --rm hearth-mvp:ci id -u)" != "0"
+      - name: Apply migrations from the built image
+        run: >-
+          docker run --rm --network host
+          -e DATABASE_URL=postgresql://budget:test-only-password@127.0.0.1:5432/budget_test
+          hearth-mvp:ci alembic -c household-alembic.ini upgrade head
+      - name: Start the built application
+        run: >-
+          docker run -d --name hearth-ci --network host
+          -e DATABASE_URL=postgresql://budget:test-only-password@127.0.0.1:5432/budget_test
+          -e APP_ENV=production -e APP_ORIGIN=https://staging.example.test
+          hearth-mvp:ci
+      - name: Verify health, compiled frontend and authentication boundary
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8000/health
+          curl -fsS http://127.0.0.1:8000/ > /tmp/hearth-index.html
+          python -c "from pathlib import Path; s=Path('/tmp/hearth-index.html').read_text(); assert '/assets/' in s and 'Hearth' in s"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/me)" = "401"
+      - name: Show container logs and stop it
+        if: always()
+        run: docker logs hearth-ci || true; docker rm -f hearth-ci || true

@@ -31,14 +31,17 @@ Import previews retain normalized financial rows. Uncommitted previews expire af
 - Password reset requires administrator access. No MFA, passkeys, email delivery, export UI or offline mode. Personal spending is kept outside the app, not hidden from a partner within a shared account.
 - Aggregator implementation is deferred. A future adapter must emit the normalized ingestion contract, add namespaced provider IDs, encrypted credential storage, household-scoped server-side token lookup, safe cursor pagination, retries and pending/posted reconciliation. Do not reactivate the legacy endpoints.
 
-## GitHub handoff
+## Repository and staging status
 
-The connected GitHub integration returned `403 Resource not accessible by integration` for branch creation. No remote branch or PR was created. The deliverable includes a Git bundle containing the feature branch and a patch relative to upstream master. After reviewing locally:
+The feature branch is published as `feature/household-mvp` and PR #2 is open:
+https://github.com/stephenhoover47/PersonalBudgetTracker/pull/2
 
-```bash
-git fetch /path/to/PersonalBudgetTracker-household-mvp.bundle feature/household-mvp:feature/household-mvp
-git switch feature/household-mvp
-git push -u origin feature/household-mvp
-```
+The initial hosted checks passed against SQLite and PostgreSQL 16, including migrations and desktop/mobile browser workflows. The follow-up staging-preparation commit adds a Docker build/runtime smoke check and one-time sample-user provisioning tests.
 
-Then open a PR targeting master using `docs/PR_DESCRIPTION.md`. Do not merge/deploy until staging verification and explicit deployment approval.
+An isolated Neon Free-plan project, `PersonalBudgetTracker MVP staging`, was created in US East with PostgreSQL 17 and fixed 0.25 CU compute. Its dedicated database is `hearth_mvp_staging`; existing Neon projects/databases were not read or modified. Connection credentials are staged as Railway variables and are never committed here.
+
+A new `Hearth MVP Staging` service is prepared in the existing Railway project's **Sandbox** environment. Creation, feature-branch source, root Dockerfile, health check, explicit migrations, production cookie settings and database variables are staged only. No Railway deployment has been started. The source is pinned to a reviewed feature-branch commit so unrelated pushes cannot deploy automatically.
+
+The staging pre-deploy command runs migrations, then `python -m household.staging_seed`. The seed refuses any target except APP_TIER=staging, the explicitly allowlisted database hostname, database `hearth_mvp_staging`, and a staging/Sandbox deployment environment. It creates two sample logins (`stephen@example.test` and `claire@example.test`) only when no household exists. Two distinct generated passwords are supplied through protected environment variables, never source or logs. Subsequent deployments leave existing users/passwords and household data unchanged. This helper must never be used for production provisioning.
+
+Before committing the staged Railway changes: verify only this new service is affected, confirm the hosting cost authorization, use the latest passing commit, and generate a Railway HTTPS domain. APP_ORIGIN references the generated public domain. Apply service resource limits after the staged service exists (the Railway API cannot apply limits to a service that exists only in a staged patch). Verify terminal deployment success, HTTPS/login behavior and sample CSV reconciliation before sharing it for testing. Production release and real-data migration remain separate approvals.

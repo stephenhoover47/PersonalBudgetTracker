@@ -25,6 +25,8 @@ Follow the root README: create a Python virtualenv, install backend dependencies
 
 Private two-user MVP; no MFA/email recovery (admin CLI reset revokes sessions), automatic bank sync, pending transactions, foreign currencies, balance reconciliation ledger or legacy-data conversion. CSVs without stable IDs can be ambiguous under partial-day exports or changed source descriptions. Imported amounts are immutable through the UI; classification/splits are editable. Savings plans do not move money or reduce the spending budget remainder. See OPERATIONS.md for retention/edge limiting and a future aggregator adapter contract.
 
-## Handoff status
+## Review and staging status
 
-A local `feature/household-mvp` branch exists. The GitHub integration denied branch creation with HTTP 403, so this description is prepared for a PR but no remote branch/PR has been created. The handoff archive includes source, a feature-branch bundle and a patch relative to upstream master `92a48e78eae13ac1a89495285525ae6ff525fa81`.
+Published on `feature/household-mvp`; [PR #2](https://github.com/stephenhoover47/PersonalBudgetTracker/pull/2) is open. Initial hosted SQLite/PostgreSQL migration/API checks and desktop/mobile browser workflows passed. The staging-preparation commit adds a Docker build/runtime check and isolated sample-user bootstrap tests.
+
+A fresh Neon Free-plan staging database and a staged-only Railway Sandbox service are prepared. No Railway compute has started; applying that configuration requires hosting-cost approval. Existing production services and financial data are untouched.
