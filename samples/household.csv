@@ -1,0 +1,8 @@
+date,merchant,amount,external_id
+2026-11-01,Rent,3600.00,demo-rent
+2026-11-02,Neighborhood Market,87.43,demo-groceries
+2026-11-03,Dinner Together,64.50,demo-dinner
+2026-11-04,Credit Card Payment,-151.93,demo-card-payment
+2026-11-05,Household Contribution,-2000.00,demo-contribution
+2026-11-06,Market Refund,-12.00,demo-refund
+2026-11-07,Emergency Fund Transfer,250.00,demo-savings
