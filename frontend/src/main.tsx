@@ -1451,3 +1451,13 @@ function EditDialog({
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
+
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker
+      .register("/sw.js", { scope: "/", updateViaCache: "none" })
+      .catch(() => {
+        // Home-screen support is optional; network-only budgeting still works.
+      });
+  });
+}

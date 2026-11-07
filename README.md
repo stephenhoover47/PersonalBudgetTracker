@@ -40,6 +40,12 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 Set `APP_ORIGIN=http://localhost:8000` for browser requests to this origin. Never expose the development server publicly.
 
+## Use it like an iPhone app
+
+Once staging is deployed, open its HTTPS link in Safari, choose Share → Add to Home Screen, leave Open as Web App enabled if offered, and add Hearth. It gets its own Home Screen icon and standalone window. Mobile navigation sits at the bottom and respects the iPhone safe areas. Apple Developer enrollment is not needed for this web-app installation.
+
+A network connection is required for your budget. The service worker only supplies a static reconnect screen when navigation fails; it never caches financial API responses, authenticated HTML, or transaction data. App updates arrive through the website without an App Store release. TestFlight/App Store distribution would be a separate native packaging project.
+
 ## Financial behavior
 
 - Integer USD cents. Positive = money out; negative = money in. No floating-point money in storage or calculations.

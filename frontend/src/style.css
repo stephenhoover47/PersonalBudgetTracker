@@ -731,3 +731,57 @@ select:focus-visible {
     font-size: 0.7rem;
   }
 }
+
+/* Installed iPhone window: respect the notch, home indicator and keyboard. */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  overscroll-behavior-y: none;
+}
+button,
+a,
+input,
+select {
+  touch-action: manipulation;
+}
+@media (max-width: 700px) {
+  aside {
+    padding-top: max(18px, env(safe-area-inset-top));
+  }
+  main {
+    padding-bottom: calc(110px + env(safe-area-inset-bottom));
+  }
+  nav {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 2px;
+    margin: 0;
+    padding: 8px max(8px, env(safe-area-inset-right))
+      calc(8px + env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+    background: #e9eee5;
+    border-top: 1px solid #d3ddcf;
+    box-shadow: 0 -6px 24px #183e3608;
+    overflow: visible;
+  }
+  nav button {
+    padding: 12px 2px;
+    text-align: center;
+    font-size: 11px;
+    min-height: 48px;
+    border-radius: 12px;
+  }
+  input,
+  select {
+    font-size: 16px;
+  }
+  dialog {
+    max-height: calc(
+      100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 28px
+    );
+  }
+}

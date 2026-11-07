@@ -698,6 +698,31 @@ def create_app(url=None, *, testing=False):
     )
     if dist.is_dir():
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+        if (dist / "icons").is_dir():
+            app.mount("/icons", StaticFiles(directory=dist / "icons"), name="icons")
+
+        def public_app_file(filename, media_type):
+            def serve():
+                path = dist / filename
+                if not path.is_file():
+                    raise HTTPException(404, "File not found")
+                headers = {"Service-Worker-Allowed": "/"} if filename == "sw.js" else {}
+                return FileResponse(path, media_type=media_type, headers=headers)
+
+            return serve
+
+        app.add_api_route(
+            "/manifest.webmanifest",
+            public_app_file("manifest.webmanifest", "application/manifest+json"),
+            methods=["GET"],
+            include_in_schema=False,
+        )
+        app.add_api_route(
+            "/sw.js",
+            public_app_file("sw.js", "application/javascript"),
+            methods=["GET"],
+            include_in_schema=False,
+        )
 
         @app.get("/")
         def index():

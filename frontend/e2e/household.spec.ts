@@ -113,11 +113,37 @@ for (const viewport of [
       path: `test-results/${viewport.name}-overview.png`,
       fullPage: true,
     });
+    const manifestResponse = await page.request.get("/manifest.webmanifest");
+    expect(manifestResponse.ok()).toBeTruthy();
+    const manifest = await manifestResponse.json();
+    expect(manifest.display).toBe("standalone");
+    expect(manifest.start_url).toBe("/");
+    for (const icon of manifest.icons) {
+      expect((await page.request.get(icon.src)).ok()).toBeTruthy();
+    }
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+    });
+    expect((await page.request.get("/api/me")).headers()["cache-control"]).toBe(
+      "no-store",
+    );
+    expect(await page.evaluate(async () => await caches.keys())).toEqual([]);
     expect(errors).toEqual([]);
     await page
       .getByRole("button", { name: "Sign out", exact: true })
       .filter({ visible: true })
       .click();
+    await expect(
+      page.getByRole("button", { name: "Sign in", exact: true }),
+    ).toBeVisible();
+    await page.context().setOffline(true);
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "Let’s reconnect." }),
+    ).toBeVisible();
+    expect(await page.evaluate(async () => await caches.keys())).toEqual([]);
+    await page.context().setOffline(false);
+    await page.getByRole("link", { name: "Try again" }).click();
     await expect(
       page.getByRole("button", { name: "Sign in", exact: true }),
     ).toBeVisible();
