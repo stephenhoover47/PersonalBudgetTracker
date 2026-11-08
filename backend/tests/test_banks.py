@@ -108,5 +108,51 @@ def test_hosted_link_legacy_result_and_pending_recovery(bank_env, monkeypatch):
         raise AssertionError(path)
     monkeypatch.setattr(banks, "call", fake)
     result = c.post("/api/banks/recover")
-    assert result.json() == {"completed": 1, "pending": 1}
+    assert result.json() == {"completed": 1, "pending": 1, "expired": 0}
     assert len(c.get("/api/banks").json()["items"]) == 1
+
+
+def test_expired_public_token_does_not_block_new_connection(bank_env, monkeypatch):
+    c, app = bank_env
+    with app.state.factory() as s:
+        for name in ["old", "new"]:
+            s.add(BankLink(household_id=1, user_id=1, token=banks.cipher().encrypt(name.encode()).decode(), created=int(time.time())))
+        s.commit()
+    exchanges = []
+    def fake(path, data):
+        if path == "/link/token/get":
+            return {"link_sessions": [{"results": {"item_add_results": [{"public_token": data["link_token"]}]}}]}
+        if path == "/item/public_token/exchange":
+            exchanges.append(data["public_token"])
+            if data["public_token"] == "old":
+                raise HTTPException(502, "Plaid: INVALID_PUBLIC_TOKEN")
+            return {"item_id": "saved-new", "access_token": "durable"}
+        if path == "/accounts/get":
+            return {"accounts": []}
+        raise AssertionError(path)
+    monkeypatch.setattr(banks, "call", fake)
+    result = c.post("/api/banks/recover")
+    assert result.status_code == 200
+    assert result.json() == {"completed": 1, "pending": 0, "expired": 1}
+    assert exchanges == ["old", "new"]
+    state = c.get("/api/banks").json()
+    assert state["pending_links"] == []
+    assert len(state["items"]) == 1
+    assert c.post("/api/banks/recover").json() == {"completed": 0, "pending": 0, "expired": 0}
+    assert exchanges == ["old", "new"]
+    with app.state.factory() as s:
+        assert s.get(BankLink, 1).token == "failed:INVALID_PUBLIC_TOKEN"
+        assert s.get(BankLink, 2).completed
+
+
+def test_non_token_provider_errors_remain_retryable(bank_env, monkeypatch):
+    c, app = bank_env
+    with app.state.factory() as s:
+        s.add(BankLink(household_id=1, user_id=1, token=banks.cipher().encrypt(b"link").decode(), created=int(time.time())))
+        s.commit()
+    def fail(*args):
+        raise HTTPException(502, "Plaid: INSTITUTION_DOWN")
+    monkeypatch.setattr(banks, "call", fail)
+    assert c.post("/api/banks/recover").status_code == 502
+    with app.state.factory() as s:
+        assert not s.get(BankLink, 1).completed

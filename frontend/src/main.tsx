@@ -1449,8 +1449,8 @@ function BankConnections({onRefresh}: {onRefresh: () => Promise<void>}) {
       if (current.pending_links?.length) {
         setBusy(true);
         try {
-          const result = await api<{completed: number; pending: number}>("/banks/recover", "POST");
-          if (active) setMessage(result.completed ? "Bank connection recovered. Choose accounts below." : "Your bank authorization has not been confirmed yet. Use Check pending connections; you do not need to start linking again.");
+          const result = await api<{completed: number; pending: number; expired: number}>("/banks/recover", "POST");
+          if (active) setMessage(result.completed ? "Bank connection recovered. Choose accounts below." : result.expired ? "An earlier bank authorization expired or was already used and has been closed. Saved connections remain below. If your bank is not listed, use Connect a bank once and return here immediately after authorizing." : "Your bank authorization has not been confirmed yet. Use Check pending connections; you do not need to start linking again.");
           if (active) {await reload(); await onRefresh();}
         } finally {if (active) setBusy(false);}
       }
@@ -1478,7 +1478,7 @@ function BankConnections({onRefresh}: {onRefresh: () => Promise<void>}) {
       window.location.assign(result.url);
     })}>Connect a bank</button>
     {state?.pending_link && <button type="button" className="secondary" disabled={busy} onClick={() => void action(async () => {
-      const result = await api<{completed: number; pending: number}>("/banks/recover", "POST"); setMessage(result.completed ? "Connections saved. Choose shared accounts below." : "Plaid has not reported a completed authorization. Finish the bank authorization in Plaid and check again shortly.");
+      const result = await api<{completed: number; pending: number; expired: number}>("/banks/recover", "POST"); setMessage(result.completed ? "Connections saved. Choose shared accounts below." : result.expired ? "Old authorizations could not be reused and were closed. Saved connections remain below. If your bank is not listed, connect it once and return immediately after authorization." : "Plaid has not reported a completed authorization. Finish the bank authorization in Plaid and check again shortly.");
     })}>Check pending connections</button>}
     {state?.items.map(item => <div key={item.id} className="bank-connection">
       <h3>Bank connection {item.id}</h3>

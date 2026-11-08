@@ -157,13 +157,29 @@ def register(app, current, db, lock, owned, audit, origin):
             raise HTTPException(404, "Link session expired")
         if link.completed:
             return {"ok": True}
-        result = call("/link/token/get", {"link_token": cipher().decrypt(link.token.encode()).decode()})
+        def close_unusable(exc):
+            if exc.status_code != 502 or exc.detail not in {"Plaid: INVALID_PUBLIC_TOKEN", "Plaid: INVALID_LINK_TOKEN"}:
+                raise exc
+            # Terminal one-use/expired credentials must not block newer sessions.
+            # Keep a non-secret failure marker; never discard a saved BankItem.
+            link.completed = True
+            link.token = "failed:" + exc.detail.split(": ", 1)[1]
+            audit(session, user, "bank.link_unusable", ident)
+            session.commit()
+            return {"ok": False, "retry_required": True}
+        try:
+            result = call("/link/token/get", {"link_token": cipher().decrypt(link.token.encode()).decode()})
+        except HTTPException as exc:
+            return close_unusable(exc)
         tokens = public_tokens(result)
         if not tokens:
             raise HTTPException(409, "No completed bank connection yet. Finish Plaid, then try again.")
         if len(tokens) != 1:
             raise HTTPException(409, "Use one bank connection per Link session")
-        exchanged = call("/item/public_token/exchange", {"public_token": next(iter(tokens))})
+        try:
+            exchanged = call("/item/public_token/exchange", {"public_token": next(iter(tokens))})
+        except HTTPException as exc:
+            return close_unusable(exc)
         item = BankItem(household_id=user.household_id, provider_id=exchanged["item_id"], token=cipher().encrypt(exchanged["access_token"].encode()).decode(), accounts=[], account_map={}, start_date=link.start_date)
         session.add(item)
         link.completed = True
@@ -178,16 +194,19 @@ def register(app, current, db, lock, owned, audit, origin):
     @app.post("/api/banks/recover")
     def recover(user=Depends(current), session=Depends(db)):
         ids = list(session.scalars(select(BankLink.id).where(BankLink.user_id == user.id, BankLink.completed.is_(False), BankLink.created > int(time.time()) - 21600).order_by(BankLink.id)))
-        completed = 0
+        completed, expired = 0, 0
         for ident in ids:
             try:
-                finish(ident, user, session)
-                completed += 1
+                result = finish(ident, user, session)
+                if result.get("retry_required"):
+                    expired += 1
+                else:
+                    completed += 1
             except HTTPException as exc:
                 session.rollback()
                 if exc.status_code != 409:
                     raise
-        return {"completed": completed, "pending": len(ids) - completed}
+        return {"completed": completed, "pending": len(ids) - completed - expired, "expired": expired}
 
     def discover_accounts(session, item):
         accounts = call("/accounts/get", {"access_token": cipher().decrypt(item.token.encode()).decode()})["accounts"]
