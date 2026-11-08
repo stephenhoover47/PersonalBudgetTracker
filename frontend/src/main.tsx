@@ -150,7 +150,7 @@ function App() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState("Overview"),
+  const [tab, setTab] = useState(new URLSearchParams(location.search).has("bank_link") ? "Settings" : "Overview"),
     [month, setMonth] = useState(currentMonth()),
     [dashboard, setDashboard] = useState<Dashboard | null>(null),
     [accounts, setAccounts] = useState<Account[]>([]),
@@ -1015,6 +1015,7 @@ function App() {
         )}
         {tab === "Settings" && (
           <>
+            <BankConnections onRefresh={refresh} />
             <section className="panel">
               <h2>Shared accounts</h2>
               <p>
@@ -1471,4 +1472,59 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
         // Home-screen support is optional; network-only budgeting still works.
       });
   });
+}
+
+type BankConnection = {id: number; accounts: {id: string; name: string; mask: string | null; kind: string}[]; selected: string[]; start_date: string | null; last_sync: number | null};
+function BankConnections({onRefresh}: {onRefresh: () => Promise<void>}) {
+  const [state, setState] = useState<{configured: boolean; pending_link: number | null; items: BankConnection[]} | null>(null);
+  const [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [error, setError] = useState("");
+  const reload = async () => setState(await api("/banks"));
+  useEffect(() => {reload().catch(e => setError(e.message));}, []);
+  async function action(fn: () => Promise<void>) {
+    setBusy(true); setError(""); setMessage("");
+    try {await fn(); await reload(); await onRefresh();}
+    catch (e) {setError((e as Error).message); await reload().catch(() => {});}
+    finally {setBusy(false);}
+  }
+  return <section className="panel">
+    <h2>Connect your banks</h2>
+    <p>Live connection pilot · Only select accounts used for shared spending. You authorize access on Plaid’s secure site.</p>
+    <p className="hint">Sync is manual during this first test to conserve your Plaid allowance. Only posted USD transactions on or after your start date are imported. They appear in Needs review; payments and transfers must be classified before using spending totals.</p>
+    {error && <p className="error" role="alert">{error}</p>}
+    {message && <p className="success" role="status">{message}</p>}
+    {state && !state.configured && <p>Bank connection setup is incomplete.</p>}
+    <button type="button" disabled={busy || !state?.configured} onClick={() => void action(async () => {
+      const result = await api<{url: string}>("/banks/link", "POST");
+      window.location.assign(result.url);
+    })}>Connect a bank</button>
+    {state?.pending_link && <button type="button" className="secondary" disabled={busy} onClick={() => void action(async () => {
+      await api(`/banks/finish/${state.pending_link}`, "POST"); setMessage("Connection saved. Choose your shared accounts below.");
+    })}>Finish bank connection</button>}
+    {state?.items.map(item => <div key={item.id} className="bank-connection">
+      <h3>Bank connection {item.id}</h3>
+      <button type="button" className="quiet" disabled={busy} onClick={() => {
+        if (window.confirm("Disconnect this bank? Imported transactions stay in PocketWatcher. Reconnecting can require duplicate reconciliation.")) void action(async () => {await api(`/banks/${item.id}/disconnect`, "POST"); setMessage("Bank disconnected. Imported transactions were kept.");});
+      }}>Disconnect bank</button>
+      {!item.accounts.length && <button type="button" disabled={busy} onClick={() => void action(async () => {await api(`/banks/${item.id}/discover`, "POST");})}>Load available accounts</button>}
+      {!item.selected.length ? <form onSubmit={e => {
+        e.preventDefault(); const data = new FormData(e.currentTarget);
+        void action(async () => {
+          await api(`/banks/${item.id}/accounts`, "PUT", {account_ids: data.getAll("account"), start_date: data.get("start")});
+          setMessage("Accounts selected. Tap Sync transactions to import them.");
+        });
+      }}><fieldset disabled={busy}>
+        {item.accounts.map(a => <label className="check" key={a.id}><input type="checkbox" name="account" value={a.id} />{a.name} {a.mask ? `••${a.mask}` : ""} · {a.kind}</label>)}
+        <label>Import from<input aria-label={`Import start date for connection ${item.id}`} type="date" name="start" defaultValue="2026-11-01" required /></label>
+        <p className="hint">Choose a date in the past 90 days. This first selection is fixed for this connection. Previously imported CSVs for the same account need reconciliation to avoid duplicates.</p>
+        <button disabled={!item.accounts.length}>Save selected accounts</button>
+      </fieldset></form> : <>
+        {item.accounts.filter(a => item.selected.includes(a.id)).map(a => <p key={a.id}>{a.name} {a.mask ? `••${a.mask}` : ""}</p>)}
+        <p className="hint">Importing from {displayDate(item.start_date!)}. {item.last_sync ? `Last synced ${new Date(item.last_sync * 1000).toLocaleString("en-US")}` : "Not synced yet."}</p>
+        <button disabled={busy} type="button" onClick={() => void action(async () => {
+          const result = await api<{changed: number}>(`/banks/${item.id}/sync`, "POST");
+          setMessage(result.changed ? `${result.changed} transaction changes synced. Review them in Transactions.` : "No new posted transactions yet. Initial bank data may still be loading; try again later.");
+        })}>Sync transactions</button>
+      </>}
+    </div>)}
+  </section>;
 }

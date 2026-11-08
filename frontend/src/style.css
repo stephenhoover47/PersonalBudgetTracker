@@ -924,3 +924,8 @@ aside .brand { font-size: 1.3rem; letter-spacing: -.6px; }
  .brand-mark { width: 40px; height: 40px; }
  .login-logo { width: min(300px, 100%); }
 }
+
+.bank-connection { border-top: 1px solid #d3dbd4; margin-top: 24px; padding-top: 20px; }
+.bank-connection fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.bank-connection label { margin: 14px 0; }
+.bank-connection input[type="date"] { width: 100%; }

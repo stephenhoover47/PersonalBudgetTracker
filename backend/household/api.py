@@ -792,6 +792,9 @@ def create_app(url=None, *, testing=False):
             "planned_savings_cents": sum(s["cents"] for s in plans),
         }
 
+    from .banks import register
+    register(app, current, db, lock, owned, audit, origin)
+
     dist = Path(
         os.getenv("FRONTEND_DIST", str(Path(__file__).resolve().parents[2] / "frontend" / "dist"))
     )

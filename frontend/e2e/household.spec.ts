@@ -26,6 +26,9 @@ for (const viewport of [
     expect(await mark.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBeTruthy();
     await page.getByLabel("Budget month", { exact: true }).fill("2026-11");
     await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.getByRole("heading", {name: "Connect your banks"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "Connect a bank", exact: true})).toBeDisabled();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
     await page.getByLabel("Account name").fill("Joint card " + viewport.name);
     await page
       .getByRole("combobox", { name: "Type", exact: true })

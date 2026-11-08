@@ -143,3 +143,26 @@ class Audit(Base):
     action: Mapped[str] = mapped_column(String(80))
     resource: Mapped[str] = mapped_column(String(100))
     created: Mapped[int] = mapped_column(Integer)
+
+
+class BankLink(Base):
+    __tablename__ = "hh_bank_links"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    household_id: Mapped[int] = mapped_column(ForeignKey("hh_households.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("hh_users.id"))
+    token: Mapped[str] = mapped_column(String(2000))
+    created: Mapped[int] = mapped_column(Integer)
+    completed: Mapped[bool] = mapped_column(default=False)
+
+
+class BankItem(Base):
+    __tablename__ = "hh_bank_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    household_id: Mapped[int] = mapped_column(ForeignKey("hh_households.id"), index=True)
+    provider_id: Mapped[str] = mapped_column(String(200), unique=True)
+    token: Mapped[str] = mapped_column(String(2000))
+    accounts: Mapped[list] = mapped_column(JSON)
+    account_map: Mapped[dict] = mapped_column(JSON, default=dict)
+    start_date: Mapped[date | None]
+    cursor: Mapped[str | None] = mapped_column(String(2000))
+    last_sync: Mapped[int | None] = mapped_column(Integer)
