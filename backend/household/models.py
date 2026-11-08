@@ -38,6 +38,7 @@ class LoginAttempt(Base):
 
 
 class Account(Base):
+    archived: Mapped[bool] = mapped_column(default=False)
     __tablename__ = "hh_accounts"
     id: Mapped[int] = mapped_column(primary_key=True)
     household_id: Mapped[int] = mapped_column(ForeignKey("hh_households.id"), index=True)
@@ -50,6 +51,7 @@ class Account(Base):
 
 
 class Category(Base):
+    archived: Mapped[bool] = mapped_column(default=False)
     __tablename__ = "hh_categories"
     id: Mapped[int] = mapped_column(primary_key=True)
     household_id: Mapped[int] = mapped_column(ForeignKey("hh_households.id"), index=True)
@@ -146,6 +148,7 @@ class Audit(Base):
 
 
 class BankLink(Base):
+    start_date: Mapped[date | None]
     __tablename__ = "hh_bank_links"
     id: Mapped[int] = mapped_column(primary_key=True)
     household_id: Mapped[int] = mapped_column(ForeignKey("hh_households.id"), index=True)

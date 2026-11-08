@@ -107,16 +107,35 @@ def sync_item(session, item):
     return changed
 
 
+class LinkStart(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    start_date: date = date(2026, 11, 1)
+
+
+def public_tokens(result):
+    tokens = set()
+    for session in result.get("link_sessions", []):
+        for item in (session.get("results") or {}).get("item_add_results", []):
+            if item.get("public_token"):
+                tokens.add(item["public_token"])
+        legacy = session.get("on_success") or {}
+        if legacy.get("public_token"):
+            tokens.add(legacy["public_token"])
+    return tokens
+
+
 def register(app, current, db, lock, owned, audit, origin):
     @app.get("/api/banks")
     def status(user=Depends(current), session=Depends(db)):
         items = session.scalars(select(BankItem).where(BankItem.household_id == user.household_id, BankItem.token != "")).all()
         pending = session.scalar(select(BankLink.id).where(BankLink.user_id == user.id, BankLink.completed.is_(False), BankLink.created > int(time.time()) - 21600).order_by(BankLink.id.desc()))
-        return {"configured": configured(), "pending_link": pending, "items": [dict(id=i.id, accounts=i.accounts, selected=list(i.account_map), start_date=i.start_date, last_sync=i.last_sync) for i in items]}
+        return {"configured": configured(), "pending_link": pending, "pending_links": [link.id for link in session.scalars(select(BankLink).where(BankLink.user_id == user.id, BankLink.completed.is_(False), BankLink.created > int(time.time()) - 21600).order_by(BankLink.id))], "items": [dict(id=i.id, accounts=i.accounts, selected=list(i.account_map), start_date=i.start_date, last_sync=i.last_sync) for i in items]}
 
     @app.post("/api/banks/link")
-    def begin(user=Depends(current), session=Depends(db)):
+    def begin(payload: LinkStart = LinkStart(), user=Depends(current), session=Depends(db)):
         cipher()
+        if payload.start_date > date.today() or (date.today() - payload.start_date).days > 90:
+            raise HTTPException(422, "Choose a date within the past 90 days")
         lock(session, user)
         recent = session.scalar(select(BankLink).where(BankLink.user_id == user.id, BankLink.created > int(time.time()) - 60))
         if recent:
@@ -125,7 +144,7 @@ def register(app, current, db, lock, owned, audit, origin):
         url = result["hosted_link_url"]
         if urlparse(url).scheme != "https" or urlparse(url).hostname != "secure.plaid.com":
             raise HTTPException(502, "Unexpected Plaid link destination")
-        session.add(BankLink(household_id=user.household_id, user_id=user.id, token=cipher().encrypt(result["link_token"].encode()).decode(), created=int(time.time())))
+        session.add(BankLink(household_id=user.household_id, user_id=user.id, token=cipher().encrypt(result["link_token"].encode()).decode(), created=int(time.time()), start_date=payload.start_date))
         audit(session, user, "bank.link", "started")
         session.commit()
         return {"url": url}
@@ -139,13 +158,13 @@ def register(app, current, db, lock, owned, audit, origin):
         if link.completed:
             return {"ok": True}
         result = call("/link/token/get", {"link_token": cipher().decrypt(link.token.encode()).decode()})
-        tokens = {p["public_token"] for s in result.get("link_sessions", []) for p in (s.get("results") or {}).get("item_add_results", []) if p.get("public_token")}
+        tokens = public_tokens(result)
         if not tokens:
             raise HTTPException(409, "No completed bank connection yet. Finish Plaid, then try again.")
         if len(tokens) != 1:
             raise HTTPException(409, "Use one bank connection per Link session")
         exchanged = call("/item/public_token/exchange", {"public_token": next(iter(tokens))})
-        item = BankItem(household_id=user.household_id, provider_id=exchanged["item_id"], token=cipher().encrypt(exchanged["access_token"].encode()).decode(), accounts=[], account_map={})
+        item = BankItem(household_id=user.household_id, provider_id=exchanged["item_id"], token=cipher().encrypt(exchanged["access_token"].encode()).decode(), accounts=[], account_map={}, start_date=link.start_date)
         session.add(item)
         link.completed = True
         link.token = ""
@@ -155,6 +174,20 @@ def register(app, current, db, lock, owned, audit, origin):
         discover_accounts(session, item)
         session.commit()
         return {"ok": True}
+
+    @app.post("/api/banks/recover")
+    def recover(user=Depends(current), session=Depends(db)):
+        ids = list(session.scalars(select(BankLink.id).where(BankLink.user_id == user.id, BankLink.completed.is_(False), BankLink.created > int(time.time()) - 21600).order_by(BankLink.id)))
+        completed = 0
+        for ident in ids:
+            try:
+                finish(ident, user, session)
+                completed += 1
+            except HTTPException as exc:
+                session.rollback()
+                if exc.status_code != 409:
+                    raise
+        return {"completed": completed, "pending": len(ids) - completed}
 
     def discover_accounts(session, item):
         accounts = call("/accounts/get", {"access_token": cipher().decrypt(item.token.encode()).decode()})["accounts"]

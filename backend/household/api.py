@@ -320,7 +320,7 @@ def create_app(url=None, *, testing=False):
 
     @app.get("/api/accounts")
     def accounts(user=Depends(current), session=Depends(db)):
-        return [dict(id=a.id, name=a.name, kind=a.kind) for a in scoped(session, Account, user)]
+        return [dict(id=a.id, name=a.name, kind=a.kind, archived=a.archived) for a in scoped(session, Account, user)]
 
     @app.post("/api/accounts", status_code=201)
     def add_account(payload: AccountIn, user=Depends(current), session=Depends(db)):
@@ -331,9 +331,43 @@ def create_app(url=None, *, testing=False):
         session.commit()
         return {"id": item.id}
 
+    @app.put("/api/accounts/{ident}")
+    def edit_account(ident: int, payload: AccountIn, user=Depends(current), session=Depends(db)):
+        lock(session, user)
+        item = owned(session, Account, ident, user)
+        item.name, item.kind = payload.name, payload.kind
+        audit(session, user, "account.update", ident)
+        session.commit()
+        return {"ok": True}
+
+    @app.post("/api/settings/{kind}/{ident}/{action}")
+    def retire(kind: Literal["accounts", "categories"], ident: int,
+               action: Literal["archive", "restore"], user=Depends(current), session=Depends(db)):
+        lock(session, user)
+        model = Account if kind == "accounts" else Category
+        item = owned(session, model, ident, user)
+        if kind == "accounts" and action == "archive":
+            from .models import BankItem
+            for bank in scoped(session, BankItem, user):
+                if bank.token and ident in bank.account_map.values():
+                    raise HTTPException(409, "Disconnect this account's bank connection before archiving it.")
+        if kind == "categories" and action == "archive" and not item.archived:
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            month = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m")
+            budget = session.scalar(select(Budget).where(Budget.household_id == user.household_id, Budget.category_id == ident, Budget.month == month))
+            if budget is None:
+                budget = Budget(household_id=user.household_id, category_id=ident, month=month)
+                session.add(budget)
+            budget.cents, budget.rollover = 0, False
+        item.archived = action == "archive"
+        audit(session, user, kind + "." + action, ident)
+        session.commit()
+        return {"ok": True}
+
     @app.get("/api/categories")
     def categories(user=Depends(current), session=Depends(db)):
-        return [dict(id=c.id, name=c.name, mode=c.mode) for c in scoped(session, Category, user)]
+        return [dict(id=c.id, name=c.name, mode=c.mode, archived=c.archived) for c in scoped(session, Category, user)]
 
     @app.post("/api/categories", status_code=201)
     def add_category(payload: CategoryIn, user=Depends(current), session=Depends(db)):
@@ -431,7 +465,8 @@ def create_app(url=None, *, testing=False):
 
     @app.post("/api/imports/preview")
     def preview(payload: ImportIn, user=Depends(current), session=Depends(db)):
-        owned(session, Account, payload.account_id, user)
+        if owned(session, Account, payload.account_id, user).archived:
+            raise HTTPException(409, "Restore this account before importing transactions")
         try:
             rows = parse_csv(payload.csv, payload.format, payload.outflows_positive)
         except (ValueError, csv.Error) as exc:
@@ -476,6 +511,8 @@ def create_app(url=None, *, testing=False):
     ):
         lock(session, user)
         batch = owned(session, ImportBatch, ident, user)
+        if owned(session, Account, batch.account_id, user).archived:
+            raise HTTPException(409, "Restore this account before importing transactions")
         if batch.status != "preview":
             raise HTTPException(409, "Import already committed")
         if batch.created < int(time.time()) - 86400:
@@ -757,6 +794,7 @@ def create_app(url=None, *, testing=False):
                     id=c.id,
                     name=c.name,
                     mode=c.mode,
+                    archived=c.archived,
                     budget_cents=amount,
                     rollover_cents=roll,
                     rollover=bool(b and b.rollover),

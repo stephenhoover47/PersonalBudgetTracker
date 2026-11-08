@@ -1,3 +1,4 @@
+import time
 from datetime import date
 
 import pytest
@@ -88,3 +89,24 @@ def test_disconnect_revokes_token_and_preserves_transactions(bank_env, monkeypat
     assert c.get("/api/banks").json()["items"] == []
     with app.state.factory() as s:
         assert s.get(BankItem, 1).token == ""
+
+
+def test_hosted_link_legacy_result_and_pending_recovery(bank_env, monkeypatch):
+    c, app = bank_env
+    assert banks.public_tokens({"link_sessions": [{"on_success": {"public_token": "legacy"}}]}) == {"legacy"}
+    with app.state.factory() as s:
+        s.add(BankLink(household_id=1, user_id=1, token=banks.cipher().encrypt(b"unfinished").decode(), created=int(time.time())))
+        s.add(BankLink(household_id=1, user_id=1, token=banks.cipher().encrypt(b"completed").decode(), created=int(time.time())))
+        s.commit()
+    def fake(path, data):
+        if path == "/link/token/get":
+            return {"link_sessions": [{"on_success": {"public_token": "ready"}}]} if data["link_token"] == "completed" else {"link_sessions": []}
+        if path == "/item/public_token/exchange":
+            return {"item_id": "recovered", "access_token": "access"}
+        if path == "/accounts/get":
+            return {"accounts": []}
+        raise AssertionError(path)
+    monkeypatch.setattr(banks, "call", fake)
+    result = c.post("/api/banks/recover")
+    assert result.json() == {"completed": 1, "pending": 1}
+    assert len(c.get("/api/banks").json()["items"]) == 1

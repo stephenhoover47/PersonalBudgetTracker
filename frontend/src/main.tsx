@@ -4,8 +4,8 @@ import { cents, dollars as money } from "./money";
 import "./style.css";
 import { displayMonth, displayDate, shiftMonth } from "./dates";
 
-type Category = { id: number; name: string; mode: string };
-type Account = { id: number; name: string; kind: string };
+type Category = { archived?: boolean; id: number; name: string; mode: string };
+type Account = { archived?: boolean; id: number; name: string; kind: string };
 type Allocation = { category_id: number; cents: number };
 type Tx = {
   id: number;
@@ -596,7 +596,7 @@ function App() {
               >
                 <option value="">All accounts</option>
                 {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
+                  <option key={a.id} value={a.id} disabled={a.archived}>
                     {a.name}
                   </option>
                 ))}
@@ -611,7 +611,7 @@ function App() {
               >
                 <option value="">All categories</option>
                 {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
+                  <option key={c.id} value={c.id} disabled={c.archived}>
                     {c.name}
                   </option>
                 ))}
@@ -643,7 +643,7 @@ function App() {
                   >
                     <option value="">Choose category</option>
                     {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
+                      <option key={c.id} value={c.id} disabled={c.archived}>
                         {c.name}
                       </option>
                     ))}
@@ -821,7 +821,7 @@ function App() {
                   >
                     <option value="">Choose account</option>
                     {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
+                      <option key={a.id} value={a.id} disabled={a.archived}>
                         {a.name}
                       </option>
                     ))}
@@ -1022,12 +1022,9 @@ function App() {
                 Add only accounts whose transactions belong in your household
                 budget. Personal spending stays outside this app.
               </p>
-              {accounts.map((a) => (
-                <div className="goal" key={a.id}>
-                  <strong>{a.name}</strong>
-                  <span>{a.kind}</span>
-                </div>
-              ))}
+              {accounts.map(a => <SettingRow key={`${a.id}-${a.name}-${a.kind}-${a.archived}`} name={a.name} value={a.kind} archived={!!a.archived} kind="accounts" busy={busy}
+                onSave={(name, value) => void run(async () => {await api(`/accounts/${a.id}`, "PUT", {name, kind: value}); await refresh(); setNotice("Account updated.");})}
+                onArchive={action => void run(async () => {await api(`/settings/accounts/${a.id}/${action}`, "POST"); await refresh(); setNotice(action === "archive" ? "Account archived. Transaction history kept." : "Account restored.");})} />)}
               <form
                 className="inline-form"
                 onSubmit={(e) => {
@@ -1067,20 +1064,9 @@ function App() {
             </section>
             <section className="panel">
               <h2>Your categories</h2>
-              {categories.map((c) => (
-                <CategoryRow
-                  key={c.id + "-" + c.name + c.mode}
-                  category={c}
-                  busy={busy}
-                  onSave={(name, mode) =>
-                    void run(async () => {
-                      await api(`/categories/${c.id}`, "PUT", { name, mode });
-                      await load();
-                      setNotice("Category updated.");
-                    })
-                  }
-                />
-              ))}
+              {categories.map(c => <SettingRow key={`${c.id}-${c.name}-${c.mode}-${c.archived}`} name={c.name} value={c.mode} archived={!!c.archived} kind="categories" busy={busy}
+                onSave={(name, value) => void run(async () => {await api(`/categories/${c.id}`, "PUT", {name, mode: value}); await refresh(); setNotice("Category updated.");})}
+                onArchive={action => void run(async () => {await api(`/settings/categories/${c.id}/${action}`, "POST"); await refresh(); setNotice(action === "archive" ? "Category archived. History kept; budget stopped from this month." : "Category restored. Set its budget in Plan.");})} />)}
               <form
                 className="inline-form"
                 onSubmit={(e) => {
@@ -1218,7 +1204,7 @@ function Plan({month, dashboard, busy, onSave, onEditingChange}: {
         {!editing && <button type="button" disabled={busy} onClick={start}>Edit plan</button>}
       </div>
       <fieldset disabled={saving || busy}>
-        {dashboard.categories.map(c => {
+        {dashboard.categories.filter(c => !c.archived).map(c => {
           const draft = budgets.find(b => b.id === c.id);
           return <div className="budget-row" key={c.id}>
             <div><strong>{c.name}</strong><small>{money(c.spent_cents)} spent · {money(c.rollover_cents)} carried{c.inherited_from ? ` · Repeating from ${displayMonth(c.inherited_from)}` : ""}</small></div>
@@ -1254,46 +1240,20 @@ function Plan({month, dashboard, busy, onSave, onEditingChange}: {
     </div>}
   </form>;
 }
-function CategoryRow({
-  category,
-  busy,
-  onSave,
-}: {
-  category: Category;
-  busy: boolean;
-  onSave: (n: string, m: string) => void;
+function SettingRow({name, value, archived, kind, busy, onSave, onArchive}: {
+ name: string; value: string; archived: boolean; kind: "accounts" | "categories"; busy: boolean;
+ onSave: (name: string, value: string) => void; onArchive: (action: "archive" | "restore") => void;
 }) {
-  const [name, setName] = useState(category.name),
-    [mode, setMode] = useState(category.mode);
-  return (
-    <form
-      className="inline-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSave(name, mode);
-      }}
-    >
-      <label>
-        Category
-        <input
-          required
-          maxLength={100}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-      </label>
-      <label>
-        Style
-        <select value={mode} onChange={(e) => setMode(e.target.value)}>
-          <option value="fixed">Fixed</option>
-          <option value="flexible">Flexible</option>
-        </select>
-      </label>
-      <button className="secondary" disabled={busy}>
-        Save
-      </button>
-    </form>
-  );
+ const [editing, setEditing] = useState(false), [draft, setDraft] = useState(name), [choice, setChoice] = useState(value);
+ if (archived) return <details className="setting-row"><summary>Archived: {name}</summary><button type="button" className="secondary" disabled={busy} onClick={() => onArchive("restore")}>Restore {name}</button></details>;
+ return <div className="setting-row" role="group" aria-label={`${kind === "accounts" ? "Account" : "Category"}: ${name}`}>
+ {editing ? <form className="inline-form" onSubmit={e => {e.preventDefault(); onSave(draft, choice);}}>
+ <label>Name<input aria-label={`Edit ${name} name`} required maxLength={100} value={draft} onChange={e => setDraft(e.target.value)} /></label>
+ <label>{kind === "accounts" ? "Type" : "Spending style"}<select aria-label={`Edit ${name} type`} value={choice} onChange={e => setChoice(e.target.value)}>
+ {(kind === "accounts" ? ["checking", "credit", "savings"] : ["fixed", "flexible"]).map(v => <option value={v} key={v}>{v === "credit" ? "Credit card" : v}</option>)}
+ </select></label><button disabled={busy}>Save changes</button><button type="button" className="secondary" disabled={busy} onClick={() => {setDraft(name); setChoice(value); setEditing(false);}}>Cancel</button>
+ </form> : <><div><strong>{name}</strong><small>{value}</small></div><div className="setting-actions"><button type="button" className="secondary" disabled={busy} onClick={() => setEditing(true)}>Edit</button><button type="button" className="quiet" disabled={busy} onClick={() => {if(window.confirm(`Archive ${name}? Transaction history stays. ${kind === "categories" ? "Its budget stops from this month onward." : "New imports should use active accounts."}`)) onArchive("archive");}}>Archive</button></div></>}
+ </div>;
 }
 function EditDialog({
   tx,
@@ -1402,7 +1362,7 @@ function EditDialog({
                 >
                   <option value="">Category</option>
                   {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
+                    <option key={c.id} value={c.id} disabled={c.archived}>
                       {c.name}
                     </option>
                   ))}
@@ -1476,10 +1436,28 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 
 type BankConnection = {id: number; accounts: {id: string; name: string; mask: string | null; kind: string}[]; selected: string[]; start_date: string | null; last_sync: number | null};
 function BankConnections({onRefresh}: {onRefresh: () => Promise<void>}) {
-  const [state, setState] = useState<{configured: boolean; pending_link: number | null; items: BankConnection[]} | null>(null);
+  const [state, setState] = useState<{configured: boolean; pending_link: number | null; pending_links?: number[]; items: BankConnection[]} | null>(null);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [error, setError] = useState("");
+  const [start, setStart] = useState("2026-11-01");
   const reload = async () => setState(await api("/banks"));
-  useEffect(() => {reload().catch(e => setError(e.message));}, []);
+  useEffect(() => {
+    let active = true;
+    async function initialize() {
+      const current = await api<{configured: boolean; pending_link: number | null; pending_links: number[]; items: BankConnection[]}>("/banks");
+      if (!active) return;
+      setState(current);
+      if (current.pending_links?.length) {
+        setBusy(true);
+        try {
+          const result = await api<{completed: number; pending: number}>("/banks/recover", "POST");
+          if (active) setMessage(result.completed ? "Bank connection recovered. Choose accounts below." : "Your bank authorization has not been confirmed yet. Use Check pending connections; you do not need to start linking again.");
+          if (active) {await reload(); await onRefresh();}
+        } finally {if (active) setBusy(false);}
+      }
+    }
+    initialize().catch(e => {if (active) setError(e.message);});
+    return () => {active = false;};
+  }, []);
   async function action(fn: () => Promise<void>) {
     setBusy(true); setError(""); setMessage("");
     try {await fn(); await reload(); await onRefresh();}
@@ -1493,13 +1471,15 @@ function BankConnections({onRefresh}: {onRefresh: () => Promise<void>}) {
     {error && <p className="error" role="alert">{error}</p>}
     {message && <p className="success" role="status">{message}</p>}
     {state && !state.configured && <p>Bank connection setup is incomplete.</p>}
+    <label>Import transactions starting<input aria-label="Bank import start date" type="date" value={start} onChange={e => setStart(e.target.value)} disabled={busy} /></label>
+    <p className="hint">Step 1: Authorize your bank. Step 2: Choose shared accounts. Step 3: Sync transactions. Existing connections are listed below.</p>
     <button type="button" disabled={busy || !state?.configured} onClick={() => void action(async () => {
-      const result = await api<{url: string}>("/banks/link", "POST");
+      const result = await api<{url: string}>("/banks/link", "POST", {start_date: start});
       window.location.assign(result.url);
     })}>Connect a bank</button>
     {state?.pending_link && <button type="button" className="secondary" disabled={busy} onClick={() => void action(async () => {
-      await api(`/banks/finish/${state.pending_link}`, "POST"); setMessage("Connection saved. Choose your shared accounts below.");
-    })}>Finish bank connection</button>}
+      const result = await api<{completed: number; pending: number}>("/banks/recover", "POST"); setMessage(result.completed ? "Connections saved. Choose shared accounts below." : "Plaid has not reported a completed authorization. Finish the bank authorization in Plaid and check again shortly.");
+    })}>Check pending connections</button>}
     {state?.items.map(item => <div key={item.id} className="bank-connection">
       <h3>Bank connection {item.id}</h3>
       <button type="button" className="quiet" disabled={busy} onClick={() => {
@@ -1514,7 +1494,7 @@ function BankConnections({onRefresh}: {onRefresh: () => Promise<void>}) {
         });
       }}><fieldset disabled={busy}>
         {item.accounts.map(a => <label className="check" key={a.id}><input type="checkbox" name="account" value={a.id} />{a.name} {a.mask ? `••${a.mask}` : ""} · {a.kind}</label>)}
-        <label>Import from<input aria-label={`Import start date for connection ${item.id}`} type="date" name="start" defaultValue="2026-11-01" required /></label>
+        <label>Import from<input aria-label={`Import start date for connection ${item.id}`} type="date" name="start" defaultValue={item.start_date || "2026-11-01"} required /></label>
         <p className="hint">Choose a date in the past 90 days. This first selection is fixed for this connection. Previously imported CSVs for the same account need reconciliation to avoid duplicates.</p>
         <button disabled={!item.accounts.length}>Save selected accounts</button>
       </fieldset></form> : <>

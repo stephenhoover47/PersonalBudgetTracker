@@ -39,6 +39,20 @@ for (const viewport of [
     await expect(
       page.getByRole("status").filter({ hasText: "Shared account added." }),
     ).toBeVisible();
+    const accountSettings = page.getByRole("group", {name: `Account: Joint card ${viewport.name}`, exact: true});
+    await accountSettings.getByRole("button", {name: "Edit", exact: true}).click();
+    await accountSettings.getByLabel(`Edit Joint card ${viewport.name} name`).fill(`Shared card ${viewport.name}`);
+    await accountSettings.getByRole("button", {name: "Save changes", exact: true}).click();
+    const renamedAccount = page.getByRole("group", {name: `Account: Shared card ${viewport.name}`, exact: true});
+    await expect(renamedAccount).toBeVisible();
+    page.once("dialog", d => d.accept());
+    await renamedAccount.getByRole("button", {name: "Archive", exact: true}).click();
+    await expect(renamedAccount).toHaveCount(0);
+    await page.getByText(`Archived: Shared card ${viewport.name}`, {exact: true}).click();
+    await page.getByRole("button", {name: `Restore Shared card ${viewport.name}`, exact: true}).click();
+    await renamedAccount.getByRole("button", {name: "Edit", exact: true}).click();
+    await renamedAccount.getByLabel(`Edit Shared card ${viewport.name} name`).fill(`Joint card ${viewport.name}`);
+    await renamedAccount.getByRole("button", {name: "Save changes", exact: true}).click();
     await page.getByRole("button", { name: "Import", exact: true }).click();
     await page
       .getByRole("combobox", { name: "Shared account", exact: true })

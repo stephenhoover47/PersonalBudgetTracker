@@ -332,3 +332,20 @@ def test_plan_save_atomic_and_recurring(env):
     assert c.put("/api/plan/2026-12", json={"removed_savings": [after["savings"][0]["id"]]}).status_code == 200
     assert c.get("/api/dashboard?month=2027-01").json()["savings"] == []
     assert c.get("/api/dashboard?month=2026-11").json()["savings"][0]["cents"] == 25000
+
+
+def test_settings_edit_archive_restore_keeps_history(env):
+    c, app = env
+    imported(c, CSV)
+    before = items(c)
+    assert c.put("/api/accounts/1", json={"name": "Renamed joint card", "kind": "credit"}).status_code == 200
+    assert c.post("/api/settings/accounts/1/archive").status_code == 200
+    assert next(a for a in c.get("/api/accounts").json() if a["id"] == 1)["archived"]
+    assert items(c) == before
+    assert c.post("/api/imports/preview", json={"account_id": 1, "csv": CSV}).status_code == 409
+    assert c.post("/api/settings/accounts/1/restore").status_code == 200
+    assert c.put("/api/categories/1", json={"name": "Food", "mode": "flexible"}).status_code == 200
+    assert c.post("/api/settings/categories/1/archive").status_code == 200
+    assert items(c) == before
+    assert c.post("/api/settings/categories/1/restore").status_code == 200
+    assert c.post("/api/settings/accounts/3/archive").status_code == 404
