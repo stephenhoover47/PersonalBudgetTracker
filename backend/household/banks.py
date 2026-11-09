@@ -124,6 +124,29 @@ def public_tokens(result):
     return tokens
 
 
+
+def link_diagnostics(result):
+    """Allowlist support metadata; never return credentials, account data or messages."""
+    def fields(obj, names):
+        return {key: value[:160] for key in names
+                if isinstance(value := obj.get(key), str) and value}
+
+    sessions = []
+    for item in result.get("link_sessions", [])[-10:]:
+        summary = fields(item, ("link_session_id", "started_at", "finished_at"))
+        exit_data = item.get("exit") or item.get("on_exit") or {}
+        summary["exit"] = fields(exit_data.get("metadata") or {}, ("status", "request_id", "link_session_id"))
+        summary["error"] = fields(exit_data.get("error") or {}, ("error_code", "error_type"))
+        summary["events"] = []
+        for event in item.get("events", [])[-100:]:
+            clean = fields(event, ("event_name", "timestamp"))
+            clean.update(fields(event.get("event_metadata") or {},
+                                ("exit_status", "error_code", "error_type", "request_id", "institution_id", "view_name")))
+            summary["events"].append(clean)
+        sessions.append(summary)
+    return {"request_id": fields(result, ("request_id",)).get("request_id"), "sessions": sessions}
+
+
 def register(app, current, db, lock, owned, audit, origin):
     @app.get("/api/banks")
     def status(user=Depends(current), session=Depends(db)):
@@ -148,6 +171,14 @@ def register(app, current, db, lock, owned, audit, origin):
         audit(session, user, "bank.link", "started")
         session.commit()
         return {"url": url}
+
+    @app.post("/api/banks/diagnostics/{ident}")
+    def diagnostics(ident: int, user=Depends(current), session=Depends(db)):
+        link = owned(session, BankLink, ident, user)
+        if link.user_id != user.id or link.completed or link.created < int(time.time()) - 21600:
+            raise HTTPException(404, "Link diagnostics are no longer available")
+        result = call("/link/token/get", {"link_token": cipher().decrypt(link.token.encode()).decode()})
+        return link_diagnostics(result)
 
     @app.post("/api/banks/finish/{ident}")
     def finish(ident: int, user=Depends(current), session=Depends(db)):

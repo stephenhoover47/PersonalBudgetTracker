@@ -156,3 +156,34 @@ def test_non_token_provider_errors_remain_retryable(bank_env, monkeypatch):
     assert c.post("/api/banks/recover").status_code == 502
     with app.state.factory() as s:
         assert not s.get(BankLink, 1).completed
+
+
+def test_link_diagnostics_capture_exit_without_an_error_and_hide_secrets(bank_env, monkeypatch):
+    c, app = bank_env
+    with app.state.factory() as s:
+        for user_id in (1, 2):
+            s.add(BankLink(household_id=1, user_id=user_id, token=banks.cipher().encrypt(b"secret-link").decode(), created=int(time.time())))
+        s.commit()
+    calls = []
+    def fake(path, data):
+        calls.append(path)
+        return {"request_id": "support-request", "link_token": "secret-link", "link_sessions": [{
+            "link_session_id": "support-session", "on_exit": {"error": None, "metadata": {"status": "requires_oauth", "accounts": ["private"]}},
+            "events": [{"event_name": "EXIT", "event_metadata": {"exit_status": "requires_oauth", "request_id": "exit-request", "error_message": "private-message", "account_number": "private-account"}}],
+            "on_success": {"public_token": "secret-public"}}]}
+    monkeypatch.setattr(banks, "call", fake)
+    assert c.post("/api/banks/diagnostics/2").status_code == 404
+    assert calls == []
+    response = c.post("/api/banks/diagnostics/1")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["sessions"][0]["exit"]["status"] == "requires_oauth"
+    assert data["sessions"][0]["error"] == {}
+    assert data["sessions"][0]["link_session_id"] == "support-session"
+    assert data["sessions"][0]["events"][0]["request_id"] == "exit-request"
+    assert "secret" not in response.text and "private" not in response.text
+    with app.state.factory() as s:
+        assert not s.get(BankLink, 1).completed
+        s.get(BankLink, 1).completed = True
+        s.commit()
+    assert c.post("/api/banks/diagnostics/1").status_code == 404

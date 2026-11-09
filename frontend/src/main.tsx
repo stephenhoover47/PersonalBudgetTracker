@@ -1439,6 +1439,7 @@ function BankConnections({onRefresh}: {onRefresh: () => Promise<void>}) {
   const [state, setState] = useState<{configured: boolean; pending_link: number | null; pending_links?: number[]; items: BankConnection[]} | null>(null);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [error, setError] = useState("");
   const [start, setStart] = useState("2026-11-01");
+  const [diagnostics, setDiagnostics] = useState("");
   const reload = async () => setState(await api("/banks"));
   useEffect(() => {
     let active = true;
@@ -1450,7 +1451,7 @@ function BankConnections({onRefresh}: {onRefresh: () => Promise<void>}) {
         setBusy(true);
         try {
           const result = await api<{completed: number; pending: number; expired: number}>("/banks/recover", "POST");
-          if (active) setMessage(result.completed ? "Bank connection recovered. Choose accounts below." : result.expired ? "An earlier bank authorization expired or was already used and has been closed. Saved connections remain below. If your bank is not listed, use Connect a bank once and return here immediately after authorizing." : "Your bank authorization has not been confirmed yet. Use Check pending connections; you do not need to start linking again.");
+          if (active) setMessage(result.completed ? "Bank connection recovered. Choose accounts below." : result.expired ? "An earlier bank authorization expired or was already used and has been closed. Saved connections remain below. If your bank is not listed, use Connect a bank once and return here immediately after authorizing." : "Plaid has not reported a successful connection. If you already finished or saw an error, use Connection details below; you do not need to start linking again.");
           if (active) {await reload(); await onRefresh();}
         } finally {if (active) setBusy(false);}
       }
@@ -1478,8 +1479,15 @@ function BankConnections({onRefresh}: {onRefresh: () => Promise<void>}) {
       window.location.assign(result.url);
     })}>Connect a bank</button>
     {state?.pending_link && <button type="button" className="secondary" disabled={busy} onClick={() => void action(async () => {
-      const result = await api<{completed: number; pending: number; expired: number}>("/banks/recover", "POST"); setMessage(result.completed ? "Connections saved. Choose shared accounts below." : result.expired ? "Old authorizations could not be reused and were closed. Saved connections remain below. If your bank is not listed, connect it once and return immediately after authorization." : "Plaid has not reported a completed authorization. Finish the bank authorization in Plaid and check again shortly.");
+      const result = await api<{completed: number; pending: number; expired: number}>("/banks/recover", "POST"); setMessage(result.completed ? "Connections saved. Choose shared accounts below." : result.expired ? "Old authorizations could not be reused and were closed. Saved connections remain below. If your bank is not listed, connect it once and return immediately after authorization." : "Plaid has not reported a successful connection. If you already attempted authorization, use Connection details below to inspect that attempt.");
     })}>Check pending connections</button>}
+    {state?.pending_link && <button type="button" className="secondary" disabled={busy} onClick={() => void action(async () => {
+      setDiagnostics(JSON.stringify(await api(`/banks/diagnostics/${state.pending_link}`, "POST"), null, 2));
+    })}>Connection details</button>}
+    {diagnostics && <details open><summary>Connection support details</summary>
+      <p className="hint">These are Plaid’s reported session events and support references, when available. An exit status alone does not identify the cause. No bank credentials or account details are included.</p>
+      <pre style={{whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: "24rem", overflow: "auto"}}>{diagnostics}</pre>
+    </details>}
     {state?.items.map(item => <div key={item.id} className="bank-connection">
       <h3>Bank connection {item.id}</h3>
       <button type="button" className="quiet" disabled={busy} onClick={() => {
