@@ -1,0 +1,189 @@
+import time
+from datetime import date
+
+import pytest
+from cryptography.fernet import Fernet
+from fastapi import HTTPException
+from sqlalchemy import select
+
+from household import banks
+from household.models import BankItem, BankLink, Transaction
+
+
+@pytest.fixture
+def bank_env(env, monkeypatch):
+    for key, value in {"PLAID_CLIENT_ID": "test-client", "PLAID_SECRET": "test-secret", "PLAID_ENV": "sandbox", "BANK_TOKEN_KEY": Fernet.generate_key().decode()}.items():
+        monkeypatch.setenv(key, value)
+    return env
+
+
+def test_link_is_user_scoped_encrypted_and_selective(bank_env, monkeypatch):
+    c, app = bank_env
+    def fake(path, data):
+        if path == "/link/token/create":
+            assert data["products"] == ["transactions"]
+            return {"hosted_link_url": "https://secure.plaid.com/hl/test", "link_token": "secret-link-token"}
+        if path == "/link/token/get":
+            return {"link_sessions": [{"results": {"item_add_results": [{"public_token": "public-test"}]}}]}
+        if path == "/item/public_token/exchange":
+            return {"item_id": "item-1", "access_token": "secret-access-token"}
+        if path == "/accounts/get":
+            return {"accounts": [{"account_id": "a", "name": "Joint", "type": "credit", "mask": "1234", "balances": {"iso_currency_code": "USD"}}]}
+        raise AssertionError(path)
+    monkeypatch.setattr(banks, "call", fake)
+    assert c.post("/api/banks/link").status_code == 200
+    ident = c.get("/api/banks").json()["pending_link"]
+    with app.state.factory() as s:
+        assert "secret-link-token" not in s.get(BankLink, ident).token
+    assert c.post(f"/api/banks/finish/{ident}").status_code == 200
+    state = c.get("/api/banks").json()
+    assert "secret-access-token" not in str(state)
+    assert state["items"][0]["selected"] == []
+    assert c.put("/api/banks/1/accounts", json={"account_ids": ["wrong"], "start_date": str(date.today())}).status_code == 422
+    assert c.put("/api/banks/1/accounts", json={"account_ids": ["a"], "start_date": str(date.today())}).status_code == 200
+    with app.state.factory() as s:
+        assert "secret-access-token" not in s.get(BankItem, 1).token
+    assert c.post("/api/banks/999/sync").status_code == 404
+
+
+def test_sync_cutoff_dedup_and_atomic_cursor(bank_env, monkeypatch):
+    c, app = bank_env
+    with app.state.factory() as s:
+        item = BankItem(household_id=1, provider_id="provider", token=banks.cipher().encrypt(b"token").decode(), accounts=[], account_map={"a": 1}, start_date=date.today())
+        s.add(item)
+        s.commit()
+    tx = {"account_id": "a", "transaction_id": "t1", "date": str(date.today()), "amount": 12.34, "iso_currency_code": "USD", "name": "Shop"}
+    monkeypatch.setattr(banks, "call", lambda *args: {"added": [tx, dict(tx, transaction_id="old", date="2000-01-01"), dict(tx, transaction_id="pending", pending=True), dict(tx, transaction_id="private", account_id="private")], "next_cursor": "cursor1", "has_more": False})
+    assert c.post("/api/banks/1/sync").json()["changed"] == 1
+    with app.state.factory() as s:
+        item = s.get(BankItem, 1)
+        item.last_sync = None
+        s.commit()
+    assert c.post("/api/banks/1/sync").json()["changed"] == 0
+    with app.state.factory() as s:
+        assert len(s.scalars(select(Transaction).where(Transaction.source == "plaid")).all()) == 1
+        s.get(BankItem, 1).last_sync = None
+        s.commit()
+    def broken(path, data):
+        if data["cursor"] == "cursor1":
+            return {"added": [dict(tx, transaction_id="new")], "next_cursor": "middle", "has_more": True}
+        raise HTTPException(502, "Plaid: TEST_ERROR")
+    monkeypatch.setattr(banks, "call", broken)
+    assert c.post("/api/banks/1/sync").status_code == 502
+    with app.state.factory() as s:
+        assert s.get(BankItem, 1).cursor == "cursor1"
+        assert len(s.scalars(select(Transaction).where(Transaction.source == "plaid")).all()) == 1
+
+
+def test_disconnect_revokes_token_and_preserves_transactions(bank_env, monkeypatch):
+    c, app = bank_env
+    with app.state.factory() as s:
+        s.add(BankItem(household_id=1, provider_id="one", token=banks.cipher().encrypt(b"token").decode(), accounts=[], account_map={"a": 1}, start_date=date.today()))
+        s.add(BankItem(household_id=2, provider_id="other", token=banks.cipher().encrypt(b"other-token").decode(), accounts=[], account_map={}))
+        s.commit()
+    calls = []
+    monkeypatch.setattr(banks, "call", lambda path, data: calls.append(path) or {})
+    assert c.post("/api/banks/2/disconnect").status_code == 404
+    assert c.post("/api/banks/1/disconnect").status_code == 200
+    assert calls == ["/item/remove"]
+    assert c.get("/api/banks").json()["items"] == []
+    with app.state.factory() as s:
+        assert s.get(BankItem, 1).token == ""
+
+
+def test_hosted_link_legacy_result_and_pending_recovery(bank_env, monkeypatch):
+    c, app = bank_env
+    assert banks.public_tokens({"link_sessions": [{"on_success": {"public_token": "legacy"}}]}) == {"legacy"}
+    with app.state.factory() as s:
+        s.add(BankLink(household_id=1, user_id=1, token=banks.cipher().encrypt(b"unfinished").decode(), created=int(time.time())))
+        s.add(BankLink(household_id=1, user_id=1, token=banks.cipher().encrypt(b"completed").decode(), created=int(time.time())))
+        s.commit()
+    def fake(path, data):
+        if path == "/link/token/get":
+            return {"link_sessions": [{"on_success": {"public_token": "ready"}}]} if data["link_token"] == "completed" else {"link_sessions": []}
+        if path == "/item/public_token/exchange":
+            return {"item_id": "recovered", "access_token": "access"}
+        if path == "/accounts/get":
+            return {"accounts": []}
+        raise AssertionError(path)
+    monkeypatch.setattr(banks, "call", fake)
+    result = c.post("/api/banks/recover")
+    assert result.json() == {"completed": 1, "pending": 1, "expired": 0}
+    assert len(c.get("/api/banks").json()["items"]) == 1
+
+
+def test_expired_public_token_does_not_block_new_connection(bank_env, monkeypatch):
+    c, app = bank_env
+    with app.state.factory() as s:
+        for name in ["old", "new"]:
+            s.add(BankLink(household_id=1, user_id=1, token=banks.cipher().encrypt(name.encode()).decode(), created=int(time.time())))
+        s.commit()
+    exchanges = []
+    def fake(path, data):
+        if path == "/link/token/get":
+            return {"link_sessions": [{"results": {"item_add_results": [{"public_token": data["link_token"]}]}}]}
+        if path == "/item/public_token/exchange":
+            exchanges.append(data["public_token"])
+            if data["public_token"] == "old":
+                raise HTTPException(502, "Plaid: INVALID_PUBLIC_TOKEN")
+            return {"item_id": "saved-new", "access_token": "durable"}
+        if path == "/accounts/get":
+            return {"accounts": []}
+        raise AssertionError(path)
+    monkeypatch.setattr(banks, "call", fake)
+    result = c.post("/api/banks/recover")
+    assert result.status_code == 200
+    assert result.json() == {"completed": 1, "pending": 0, "expired": 1}
+    assert exchanges == ["old", "new"]
+    state = c.get("/api/banks").json()
+    assert state["pending_links"] == []
+    assert len(state["items"]) == 1
+    assert c.post("/api/banks/recover").json() == {"completed": 0, "pending": 0, "expired": 0}
+    assert exchanges == ["old", "new"]
+    with app.state.factory() as s:
+        assert s.get(BankLink, 1).token == "failed:INVALID_PUBLIC_TOKEN"
+        assert s.get(BankLink, 2).completed
+
+
+def test_non_token_provider_errors_remain_retryable(bank_env, monkeypatch):
+    c, app = bank_env
+    with app.state.factory() as s:
+        s.add(BankLink(household_id=1, user_id=1, token=banks.cipher().encrypt(b"link").decode(), created=int(time.time())))
+        s.commit()
+    def fail(*args):
+        raise HTTPException(502, "Plaid: INSTITUTION_DOWN")
+    monkeypatch.setattr(banks, "call", fail)
+    assert c.post("/api/banks/recover").status_code == 502
+    with app.state.factory() as s:
+        assert not s.get(BankLink, 1).completed
+
+
+def test_link_diagnostics_capture_exit_without_an_error_and_hide_secrets(bank_env, monkeypatch):
+    c, app = bank_env
+    with app.state.factory() as s:
+        for user_id in (1, 2):
+            s.add(BankLink(household_id=1, user_id=user_id, token=banks.cipher().encrypt(b"secret-link").decode(), created=int(time.time())))
+        s.commit()
+    calls = []
+    def fake(path, data):
+        calls.append(path)
+        return {"request_id": "support-request", "link_token": "secret-link", "link_sessions": [{
+            "link_session_id": "support-session", "on_exit": {"error": None, "metadata": {"status": "requires_oauth", "accounts": ["private"]}},
+            "events": [{"event_name": "EXIT", "event_metadata": {"exit_status": "requires_oauth", "request_id": "exit-request", "error_message": "private-message", "account_number": "private-account"}}],
+            "on_success": {"public_token": "secret-public"}}]}
+    monkeypatch.setattr(banks, "call", fake)
+    assert c.post("/api/banks/diagnostics/2").status_code == 404
+    assert calls == []
+    response = c.post("/api/banks/diagnostics/1")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["sessions"][0]["exit"]["status"] == "requires_oauth"
+    assert data["sessions"][0]["error"] == {}
+    assert data["sessions"][0]["link_session_id"] == "support-session"
+    assert data["sessions"][0]["events"][0]["request_id"] == "exit-request"
+    assert "secret" not in response.text and "private" not in response.text
+    with app.state.factory() as s:
+        assert not s.get(BankLink, 1).completed
+        s.get(BankLink, 1).completed = True
+        s.commit()
+    assert c.post("/api/banks/diagnostics/1").status_code == 404

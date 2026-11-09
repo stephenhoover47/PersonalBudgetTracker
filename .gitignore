@@ -57,3 +57,17 @@ Thumbs.db
 # Jupyter Notebooks
 .ipynb_checkpoints
 *.ipynb
+
+
+# Household application local artifacts
+*.db
+*.db-shm
+*.db-wal
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+playwright-report/
+test-results/
+.venv/
+__pycache__/
+.pytest_cache/

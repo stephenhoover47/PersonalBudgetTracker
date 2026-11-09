@@ -35,3 +35,10 @@ docs/
 # Other
 .DS_Store
 Thumbs.db
+.env*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+__pycache__
+.pytest_cache
